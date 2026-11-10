@@ -8,17 +8,17 @@ export const CHROMA_KEEP = 0.85;
 export const HL = [236, 72, 153];        // pink used by "show detected area"
 
 /** Mean Lab colour of the solid wall pixels between the 20th and 45th lightness percentile ("ordinary light").
- *  sm = {r,g,b} smoothed channels of the working image, alpha = final mask 0..255. */
-export function wallRef(W, H, sm, alpha) {
+ *  orig = RGBA pixels of the working image, alpha = final mask 0..255. */
+export function wallRef(W, H, orig, alpha) {
   const n = W * H, hist = new Uint32Array(401), tmp = [0, 0, 0];
   let tot = 0;
-  for (let i = 0; i < n; i += 2) { if (alpha[i] < 230) continue; labOf(sm.r[i], sm.g[i], sm.b[i], tmp); hist[Math.max(0, Math.min(400, Math.round(tmp[0] * 4)))]++; tot++; }
+  for (let i = 0; i < n; i += 2) { if (alpha[i] < 230) continue; const o = i * 4; labOf(orig[o], orig[o + 1], orig[o + 2], tmp); hist[Math.max(0, Math.min(400, Math.round(tmp[0] * 4)))]++; tot++; }
   if (!tot) return labOf(128, 128, 128, [0, 0, 0]);
   let acc = 0, lo = 0, hi = 400;
   for (let k = 0; k <= 400; k++) { acc += hist[k]; if (acc < tot * 0.2) lo = k + 1; if (acc >= tot * 0.45) { hi = k; break; } }
   const ref = [0, 0, 0]; let c = 0;
   for (let i = 0; i < n; i += 2) {
-    if (alpha[i] < 230) continue; labOf(sm.r[i], sm.g[i], sm.b[i], tmp);
+    if (alpha[i] < 230) continue; const o = i * 4; labOf(orig[o], orig[o + 1], orig[o + 2], tmp);
     const q = Math.round(tmp[0] * 4); if (q < lo || q > hi) continue;
     ref[0] += tmp[0]; ref[1] += tmp[1]; ref[2] += tmp[2]; c++;
   }

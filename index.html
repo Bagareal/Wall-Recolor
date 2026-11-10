@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wall Recolor</title>
+<meta name="description" content="Recolor the wall of your photos in any Pantone, hex or RGB colour, in your browser. Nothing is uploaded.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23333F48'/%3E%3Crect x='6' y='8' width='20' height='12' rx='2' fill='%23ffffff' fill-opacity='.85'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div>
+        <h1 data-i18n="title">Wall Recolor</h1>
+        <p class="sub" data-i18n="subtitle"></p>
+      </div>
+    </div>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang="fr" aria-pressed="false">FR</button>
+      <button type="button" data-lang="it" aria-pressed="false">IT</button>
+    </div>
+  </header>
+
+  <div class="notice" id="desktopNote" role="note" hidden><span data-i18n="desktopNote"></span><button type="button" id="noteClose" data-i18n-aria="close">×</button></div>
+  <p class="ai" id="aiChip" data-state="loading" aria-live="polite"></p>
+
+  <main>
+    <section id="drop" class="drop" tabindex="0" role="button" aria-labelledby="dropTitle">
+      <div class="ico" aria-hidden="true">+</div>
+      <h2 id="dropTitle" data-i18n="dropTitle"></h2>
+      <p data-i18n="dropSub"></p>
+      <p class="note" data-i18n="dropNote"></p>
+    </section>
+
+    <section id="studio" class="studio" hidden>
+      <div>
+        <div class="toolbar">
+          <div class="seg" role="group" aria-label="View">
+            <button type="button" id="mCompare" aria-pressed="true" data-i18n="viewCompare"></button>
+            <button type="button" id="mTouch" aria-pressed="false" data-i18n="viewTouch"></button>
+          </div>
+          <label class="check"><input type="checkbox" id="hl"><span data-i18n="hl"></span></label>
+          <div class="seg zoombar" id="zoomBar" role="group" hidden>
+            <button type="button" id="zOut" data-i18n-aria="zoomOut" title="−">−</button>
+            <span class="zlabel" id="zLabel">100%</span>
+            <button type="button" id="zIn" data-i18n-aria="zoomIn" title="+">+</button>
+            <button type="button" id="zFit" data-i18n="zoomFit"></button>
+          </div>
+        </div>
+        <div id="stage" class="stage compare" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" data-i18n-aria="compareHelp">
+          <div class="view" id="view">
+            <canvas id="cvRes"></canvas>
+            <canvas id="cvOrig"></canvas>
+          </div>
+          <div class="divider" id="divider"><div class="knob" aria-hidden="true">⇆</div></div>
+          <span class="tag tagL" data-i18n="before"></span>
+          <span class="tag tagR" data-i18n="after"></span>
+          <div class="cursor" id="cursor"></div>
+          <div class="bprev" id="bprev"></div>
+          <button type="button" class="nav navL" id="prev" hidden data-i18n-aria="prev">‹</button>
+          <button type="button" class="nav navR" id="next" hidden data-i18n-aria="next">›</button>
+        </div>
+        <p class="status" id="status" aria-live="polite"></p>
+        <p class="info" id="info"></p>
+        <div class="carousel">
+          <div class="cbar"><span class="counter" id="counter"></span><span id="batchInfo"></span></div>
+          <div class="strip" id="strip" role="listbox" data-i18n-aria="photosLabel"></div>
+        </div>
+      </div>
+
+      <aside class="panel">
+        <div class="card pantone">
+          <div class="col"></div>
+          <div class="lab"><b id="colName"></b><span id="colDesc"></span></div>
+          <form class="edit" id="colForm">
+            <label for="colIn" class="sr-only" hidden data-i18n="colorTitle"></label>
+            <input id="colIn" type="text" autocomplete="off" spellcheck="false">
+            <button type="submit" class="btn" data-i18n="colorApply"></button>
+          </form>
+          <p class="hint" data-i18n="colorHint"></p>
+        </div>
+
+        <div class="card" id="touchCard" hidden>
+          <h3 data-i18n="touchTitle"></h3>
+          <div class="row" style="margin-bottom:8px">
+            <button type="button" class="btn" id="tAdd" aria-pressed="true" data-i18n="toolAdd"></button>
+            <button type="button" class="btn" id="tErase" aria-pressed="false" data-i18n="toolErase"></button>
+          </div>
+          <div class="row" style="margin-bottom:8px">
+            <button type="button" class="btn" id="tPick" aria-pressed="false" data-i18n="toolPick"></button>
+            <button type="button" class="btn" id="tRemove" aria-pressed="false" data-i18n="toolRemove"></button>
+          </div>
+          <p class="hint" style="margin:0 0 12px" data-i18n="toolHint"></p>
+          <div class="lbl"><label for="bsize" data-i18n="brushSize"></label><span id="bsizeVal"></span></div>
+          <input type="range" id="bsize" min="2" max="200" value="40">
+          <div class="lbl" style="margin-top:10px"><label for="bhard" data-i18n="brushHard"></label><span id="bhardVal"></span></div>
+          <input type="range" id="bhard" min="0" max="100" value="80">
+          <div class="row" style="margin-top:12px">
+            <button type="button" class="btn" id="bUndo" data-i18n="undo"></button>
+            <button type="button" class="btn" id="bRedo" data-i18n="redo"></button>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button type="button" class="btn" id="bPeek" data-i18n="original"></button>
+            <button type="button" class="btn" id="bReset" data-i18n="resetEdits"></button>
+          </div>
+          <h3 style="margin-top:18px" data-i18n="adjTitle"></h3>
+          <div class="lbl"><label for="aOp" data-i18n="adjOp"></label><span id="aOpVal"></span></div>
+          <input type="range" id="aOp" min="0" max="100" value="100">
+          <div class="lbl" style="margin-top:10px"><label for="aSat" data-i18n="adjSat"></label><span id="aSatVal"></span></div>
+          <input type="range" id="aSat" min="-100" max="100" value="0">
+          <div class="lbl" style="margin-top:10px"><label for="aLight" data-i18n="adjLight"></label><span id="aLightVal"></span></div>
+          <input type="range" id="aLight" min="-100" max="100" value="0">
+          <div class="row" style="margin-top:10px"><button type="button" class="btn" id="aReset" data-i18n="adjReset"></button></div>
+          <p class="hint" data-i18n="touchHint"></p>
+        </div>
+
+        <div class="card">
+          <div class="field">
+            <label for="fmt" data-i18n="format"></label>
+            <select id="fmt"><option value="jpg">JPG</option><option value="png">PNG</option></select>
+          </div>
+          <button type="button" class="btn primary" id="dl" data-i18n="download"></button>
+          <div style="height:10px"></div>
+          <button type="button" class="btn" id="dlAll" style="width:100%" hidden></button>
+          <div style="height:10px"></div>
+          <button type="button" class="btn" id="again" style="width:100%" data-i18n="newPhoto"></button>
+        </div>
+      </aside>
+    </section>
+  </main>
+</div>
+
+<input type="file" id="file" accept="image/*" multiple hidden>
+<div class="overlay" id="busy" hidden><div class="box" role="status"><div class="spin"></div><div id="busyTxt"></div><div class="bar" id="busyBar" hidden><i></i></div></div></div>
+<div class="banner" id="banner" role="alert" hidden></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

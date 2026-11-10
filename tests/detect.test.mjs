@@ -84,7 +84,7 @@ test('samPoints picks confident points and SAM helpers map masks back to the ima
 test('recolor maps the wall reference colour exactly to the target and leaves alpha 0 untouched', () => {
   const { orig, truth, W, H } = scene();
   const st = buildWork(orig, W, H);
-  const ref = wallRef(W, H, st.sm, truth), target = [51, 63, 72];
+  const ref = wallRef(W, H, orig, truth), target = [51, 63, 72];
   const P = renderParams(ref, target, { op: 100, sat: 0, light: 0 });
   const src = new Uint8ClampedArray(8), dst = new Uint8ClampedArray(8), alpha = new Uint8Array([255, 0]);
   const refRgb = rgbOfLab(ref[0], ref[1], ref[2], [0, 0, 0]);
