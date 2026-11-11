@@ -387,7 +387,7 @@ function downloadBlob(blob, filename) {
 }
 function setFmt(f) { fmt = f; document.querySelectorAll('[data-fmt]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fmt === f))); }
 document.querySelectorAll('[data-fmt]').forEach(b => b.addEventListener('click', () => setFmt(b.dataset.fmt)));
-const outName = (ph, fmt) => ph.name + '-' + colorSlug(target) + (fmt === 'psd' ? '-layer' : '') + '.' + fmt;   // fmt is also the extension
+const outName = (ph, fmt) => ph.name + '-' + colorSlug(target) + (fmt === 'psd' ? '-mask' : '') + '.' + fmt;   // fmt is also the extension
 async function exportCurrent() {
   if (!S || S.ph.status !== 'ready') return;
   const ph = S.ph;
@@ -406,7 +406,7 @@ async function exportAll() {
       const ph = list[k];
       busy(t('exportingN', { i: k + 1, n: list.length, p: 0 }), k / list.length * 100);
       const blob = await requestExport(ph, fmt, p => busy(t('exportingN', { i: k + 1, n: list.length, p }), (k + p / 100) / list.length * 100));
-      const base = ph.name + '-' + colorSlug(target) + (fmt === 'psd' ? '-layer' : ''); let nm = base + '.' + fmt, c = 2;
+      const base = ph.name + '-' + colorSlug(target) + (fmt === 'psd' ? '-mask' : ''); let nm = base + '.' + fmt, c = 2;
       while (used.has(nm)) { nm = base + '-' + c + '.' + fmt; c++; }
       used.add(nm); entries.push({ name: nm, blob });
     }

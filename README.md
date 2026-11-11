@@ -12,7 +12,7 @@ Nothing is uploaded: the photos, the AI models and the rendering all stay on you
 1. Drop one or more photos (JPG, PNG, WebP, AVIF or TIFF, any size).
 2. Two small AI models find the wall automatically; a colour model then refines the outline pixel by pixel. While a photo is being analysed you already see it, with a small pixel animation on the *After* side and the progress in the footer.
 3. The wall is recoloured **while keeping the light**: shadows stay darker, lamp glow stays warmer, edges stay soft.
-4. Compare before / after with a slider, touch up the selection if needed, and download the result at the photo's full resolution as JPG or PNG (single file or ZIP for a batch), or just the wall layer as a PSD to drop into your own Photoshop file.
+4. Compare before / after with a slider, touch up the selection if needed, and download the result at the photo's full resolution as JPG or PNG (single file or ZIP for a batch), or as **Mask**: a PSD of the recoloured photo with a layer mask on the wall only, to drop into your own Photoshop file.
 
 The default colour is **Pantone 432 C** (`#333F48`). Type any other colour in the colour card:
 
@@ -48,7 +48,7 @@ The interface is dark-themed and available in English (default), French and Ital
 | --- | --- |
 | **Open** | JPG, PNG, WebP, AVIF, GIF, BMP and TIFF, 8 or 16 bits per channel. PSD and HEIC files can't be opened: save a TIFF or JPG copy first. |
 | **TIFF** | the flattened image is used (TIFF layers are not read, the file is never changed). 16-bit files are reduced to 8 bits; CMYK files are converted to RGB with approximate colours. |
-| **Export** | JPG or PNG: the finished photo, 8 bits per channel. PSD: **only the wall layer**, the new colour with the wall as a layer mask and the chosen opacity (saturation, brightness and contrast already applied), at the photo's size and in its colour profile. In Photoshop, Shift-drag it into your own TIFF or PSD: it lands exactly in place and your layers are untouched. |
+| **Export** | JPG or PNG: the finished photo, 8 bits per channel. **Mask**: a PSD (`photo-432C-mask.psd`) with one layer, the recoloured photo with a layer mask on the recoloured part only (the wall) and the chosen opacity (saturation, brightness and contrast already applied), at the photo's size and in its colour profile. In Photoshop, Shift-drag the layer into your own TIFF or PSD: it lands exactly in place and your layers are untouched. |
 | **Colour profile** | each photo keeps its ICC profile (sRGB, Adobe RGB, Display P3, ProPhoto… any RGB matrix profile): the colour is applied in the photo's own profile and the profile is embedded in the export. The wall looks the same colour whatever the profile, but the RGB numbers depend on it (in an Adobe RGB photo, 432 C is not 51 63 72). Photos without a profile, and AVIF / GIF / BMP files, are treated as sRGB; CMYK, greyscale and lookup-table profiles are exported in sRGB, and the app says so when the photo is opened. |
 
 ## Privacy
@@ -109,7 +109,7 @@ js/anim.js        pixel animation shown while a photo is analysed
 js/worker.js      Web Worker: message loop, transformers.js inference, detection, SAM clicks
 js/decode.js      opening photos in the worker (browser formats, TIFF) with their colour profile
 js/exporter.js    full-size export: mask upscaling, recolouring in the photo's profile, JPG / PNG / PSD output
-js/psd.js         wall layer PSD writer (colour + mask + opacity)
+js/psd.js         Mask PSD writer (recoloured photo + wall mask + opacity)
 js/icc.js         ICC profiles: reading, colour spaces, a small sRGB profile
 js/formats.js     file signatures, ICC profiles inside JPEG / PNG / WebP
 js/libs.js        TIFF and PSD libraries, loaded on demand
