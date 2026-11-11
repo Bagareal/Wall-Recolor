@@ -141,7 +141,7 @@ It uses the following open-source components, loaded at run time:
 
 The interface uses the [Lexend](https://github.com/googlefonts/lexend) typeface by The Lexend Project Authors, bundled under the [SIL Open Font License 1.1](fonts/OFL.txt).
 
-The photo in the screenshot is by [Katja Rooke](https://unsplash.com/@rooke) on [Unsplash](https://unsplash.com/photos/77JACslA8G0) (Unsplash License).
+The photo in the screenshot is by [Oluwafunto Akintoye](https://unsplash.com/@funtokint) on [Unsplash](https://unsplash.com/photos/bAFeDXWXL90) (Unsplash License).
 
 CLIPSeg also builds on OpenAI's CLIP (MIT). The guided filter follows He, Sun & Tang, *Guided Image Filtering* (2010).
 
