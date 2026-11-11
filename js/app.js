@@ -601,11 +601,17 @@ bhard.addEventListener('input', () => { showBsize(); brushPreview('center'); });
 showBsize();
 
 /* ---------- keyboard ---------- */
+const TOOL_KEYS = { b: 'add', e: 'erase', '+': 'pick', '-': 'remove' };   // B brush, E eraser, + / − area (also numpad)
 window.addEventListener('keydown', e => {
-  if (!S || mode !== 'touch') return;
+  if (!S) return;
   const tg = e.target, tag = tg && tg.tagName;
   if (tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && tg.type !== 'range' && tg.type !== 'checkbox')) return;
   const key = e.key.toLowerCase();
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && TOOL_KEYS[key] && !e.repeat) {   // tool keys also switch to Touch up
+    if (mode !== 'touch') setMode('touch');
+    setTool(TOOL_KEYS[key]); e.preventDefault(); return;
+  }
+  if (mode !== 'touch') return;
   if ((e.ctrlKey || e.metaKey) && key === 'z') { if (e.shiftKey) redo(); else undo(); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && key === 'y') { redo(); e.preventDefault(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -619,9 +625,7 @@ window.addEventListener('keydown', e => {
   } else if (e.key === '[' || e.key === ']') {
     bsize.value = Math.round(Math.max(2, Math.min(200, +bsize.value * (e.key === ']' ? 1.25 : 0.8))));
     showBsize(); $('cursor').style.width = $('cursor').style.height = bsize.value + 'px'; brushPreview(); e.preventDefault();
-  } else if (e.key === '+' || e.key === '=') { zoomCenter(1.5); e.preventDefault(); }
-  else if (e.key === '-') { zoomCenter(1 / 1.5); e.preventDefault(); }
-  else if (e.key === '0') { resetView(); e.preventDefault(); }
+  } else if (e.key === '0') { resetView(); e.preventDefault(); }
 });
 window.addEventListener('keyup', e => {
   if (e.code === 'Space') { spaceDown = false; stage.classList.remove('pan'); }

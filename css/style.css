@@ -34,6 +34,7 @@ input[type=range]:disabled{opacity:.4}
 .nav svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;flex:none}
 .nav:hover{background:var(--card);color:var(--ink)}
 .nav[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.nav kbd{margin-left:auto;min-width:20px;padding:1px 5px;border-radius:5px;border:1px solid var(--line);background:var(--bg);color:var(--muted);font:500 10.5px/1.4 inherit;text-align:center}
 .nav.sub[aria-pressed="true"]{background:var(--raised);color:var(--ink);box-shadow:inset 3px 0 0 var(--accent)}
 .nav:disabled{opacity:.4;cursor:default;background:transparent}
 .touch-tools{display:flex;flex-direction:column;flex:1}

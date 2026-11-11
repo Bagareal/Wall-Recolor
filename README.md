@@ -36,7 +36,7 @@ The chosen colour is remembered in the browser and applies to every photo of the
 | **Adjustments** | opacity of the new colour, saturation, brightness and contrast of the result (contrast deepens or softens the shadows on the wall) |
 | **Show detected area** | pink overlay of the current selection |
 
-Keyboard (Touch up mode): `Ctrl+Z` undo, `Ctrl+Shift+Z` / `Ctrl+Y` redo, hold `O` for the original, `[` `]` brush size, `Shift+[` `]` brush hardness, `+` `−` `0` zoom, hold `Space` or use the right mouse button to pan, `Ctrl` + right-drag to change the brush size (left/right) and hardness (up/down). In the photo strip: arrows to move, `Delete` to remove the focused photo.
+Keyboard: `B` brush (Paint wall), `E` eraser, `+` / `−` add or remove an area (+ Area / − Area); these keys also switch to Touch up. In Touch up: `0` fit the photo, `Ctrl+Z` undo, `Ctrl+Shift+Z` / `Ctrl+Y` redo, hold `O` for the original, `[` `]` brush size, `Shift+[` `]` brush hardness, mouse wheel to zoom, hold `Space` or use the right mouse button to pan, `Ctrl` + right-drag to change the brush size (left/right) and hardness (up/down). In the photo strip: arrows to move, `Delete` to remove the focused photo.
 
 The interface is dark-themed and available in English (default), French and Italian; switch language at the top right, the choice is remembered.
 
