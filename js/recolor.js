@@ -32,15 +32,19 @@ export function wallLuminance(orig, alpha) {
   return cnt ? Math.max(sum / cnt, 1e-4) : 0.2;
 }
 
-/** Everything the per-pixel loop needs: ref = wall Lab, target = [r,g,b], adj = {op:0..100, sat:-100..100, light:-100..100}. */
+/** Everything the per-pixel loop needs: ref = wall Lab, target = [r,g,b],
+ *  adj = {op:0..100, sat:-100..100, light:-100..100, contrast:-100..100 (optional, 0 = none)}.
+ *  Contrast scales each wall pixel's lightness difference from the (shifted) target: shadows deeper or softer. */
 export function renderParams(ref, target, adj) {
   const T = labOf(target[0], target[1], target[2], [0, 0, 0]), a = adj || { op: 100, sat: 0, light: 0 };
-  return { dL: T[0] - ref[0] + a.light * 0.25, ka: T[1] - ref[1] * CHROMA_KEEP, kb: T[2] - ref[2] * CHROMA_KEEP, sf: 1 + a.sat / 100, op: a.op / 100 };
+  const TL = T[0] + a.light * 0.25;
+  return { dL: TL - ref[0], ka: T[1] - ref[1] * CHROMA_KEEP, kb: T[2] - ref[2] * CHROMA_KEEP, sf: 1 + a.sat / 100, op: a.op / 100,
+    TL, kc: 1 + (a.contrast || 0) / 100 };
 }
 
 /** Recolour pixels [i0, i1) of src into dst (RGBA, may be the same buffer). alpha[i] 0..255 per pixel; hl = pink overlay instead of recolour. */
 export function recolor(src, dst, alpha, i0, i1, P, hl) {
-  const lab = [0, 0, 0], rgb = [0, 0, 0], { dL, ka, kb, sf, op } = P;
+  const lab = [0, 0, 0], rgb = [0, 0, 0], { dL, ka, kb, sf, op, TL, kc } = P;
   for (let i = i0; i < i1; i++) {
     const o = i * 4, a = alpha[i], r = src[o], g = src[o + 1], b = src[o + 2];
     if (a <= 0) { dst[o] = r; dst[o + 1] = g; dst[o + 2] = b; dst[o + 3] = 255; continue; }
@@ -49,7 +53,7 @@ export function recolor(src, dst, alpha, i0, i1, P, hl) {
       dst[o] = r + (HL[0] - r) * q; dst[o + 1] = g + (HL[1] - g) * q; dst[o + 2] = b + (HL[2] - b) * q;
     } else {
       const k = a / 255 * op;
-      labOf(r, g, b, lab); rgbOfLab(lab[0] + dL, (lab[1] * CHROMA_KEEP + ka) * sf, (lab[2] * CHROMA_KEEP + kb) * sf, rgb);
+      labOf(r, g, b, lab); rgbOfLab(TL + (lab[0] + dL - TL) * kc, (lab[1] * CHROMA_KEEP + ka) * sf, (lab[2] * CHROMA_KEEP + kb) * sf, rgb);
       dst[o] = r + (rgb[0] - r) * k; dst[o + 1] = g + (rgb[1] - g) * k; dst[o + 2] = b + (rgb[2] - b) * k;
     }
     dst[o + 3] = 255;
