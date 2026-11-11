@@ -1,4 +1,5 @@
-// Compute worker: AI inference (transformers.js), wall detection, SAM click-selection and full-size export.
+// Compute worker: opening photos (decode.js), AI inference (transformers.js), wall detection, SAM click-selection
+// and full-size export (exporter.js).
 // The page never blocks: everything heavy happens here.
 //
 // Two small open-source models run in the browser through transformers.js (Apache-2.0):
@@ -7,8 +8,8 @@
 // Model files: ./models/ when served from localhost (see README), otherwise the Hugging Face hub. Photos never leave the browser.
 
 import { buildWork, autoTune, samPoints, samUnion, samBest, aiMax, AI_MIN } from './detect.js';
-import { renderParams, recolor } from './recolor.js';
-import { guidedFilter } from './imgproc.js';
+import { openPreview, OpenError } from './decode.js';
+import { exportPhoto } from './exporter.js';
 
 const CDN = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
 const CLIP = 'Xenova/clipseg-rd64-refined', SAM = 'Xenova/slimsam-77-uniform';
@@ -175,67 +176,36 @@ async function samPoint({ id, orig, W, H, x, y }) {
   }
 }
 
-/* ---------- full-size export, processed in strips ---------- */
-async function exportPhoto({ id, file, W, H, fw, fh, alpha, ref, target, adj, fmt }) {
+/* ---------- opening a photo (not queued: it must not wait for the analysis of the other photos) ---------- */
+async function openPhoto({ id, file, maxWork }) {
   try {
-    const bmp = await createImageBitmap(file, { resizeWidth: fw, resizeHeight: fh, resizeQuality: 'high' });
-    const cv = new OffscreenCanvas(fw, fh), ctx = cv.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(bmp, 0, 0, fw, fh); bmp.close();
-    const P = renderParams(ref, target, adj);
-    const X0 = new Int32Array(fw), X1 = new Int32Array(fw), FX = new Float32Array(fw);
-    for (let x = 0; x < fw; x++) {
-      let g = (x + 0.5) * W / fw - 0.5; if (g < 0) g = 0; if (g > W - 1) g = W - 1;
-      const i = Math.floor(g); X0[x] = i; X1[x] = Math.min(W - 1, i + 1); FX[x] = g - i;
-    }
-    const scale = fw / W, refine = scale > 1.3;                  // re-snap the mask to full-size edges when it was upscaled
-    const r = Math.max(2, Math.round(Math.max(fw, fh) / 320)), pad = refine ? 2 * r + 2 : 0;
-    const STRIP = Math.max(16, Math.floor(1e6 / fw));
-    const rowAlpha = (y, out, off) => {                           // bilinear sample of the low-res alpha for one full-size row
-      let gy = (y + 0.5) * H / fh - 0.5; if (gy < 0) gy = 0; if (gy > H - 1) gy = H - 1;
-      const yi = Math.floor(gy), fy = gy - yi, rA = yi * W, rB = Math.min(H - 1, yi + 1) * W;
-      for (let x = 0; x < fw; x++) {
-        const fx = FX[x], x0 = X0[x], x1 = X1[x];
-        out[off + x] = (alpha[rA + x0] * (1 - fx) + alpha[rA + x1] * fx) * (1 - fy) + (alpha[rB + x0] * (1 - fx) + alpha[rB + x1] * fx) * fy;
-      }
-    };
-    for (let y0 = 0; y0 < fh; y0 += STRIP) {
-      const h = Math.min(STRIP, fh - y0), top = Math.max(0, y0 - pad), bot = Math.min(fh, y0 + h + pad), hh = bot - top;
-      const id8 = ctx.getImageData(0, top, fw, hh), d = id8.data, n = fw * hh;
-      const a = new Float32Array(n);
-      for (let y = 0; y < hh; y++) rowAlpha(top + y, a, y * fw);
-      let a8;
-      let partial = false; for (let i = 0; i < n && !partial; i++) partial = a[i] > 2 && a[i] < 253;
-      if (refine && partial) {
-        const I = [new Float32Array(n), new Float32Array(n), new Float32Array(n)], p = new Float32Array(n);
-        for (let i = 0; i < n; i++) { I[0][i] = d[i * 4] / 255; I[1][i] = d[i * 4 + 1] / 255; I[2][i] = d[i * 4 + 2] / 255; p[i] = a[i] / 255; }
-        const q = guidedFilter(I, p, fw, hh, r, 2e-3);
-        a8 = new Uint8Array(n);
-        for (let i = 0; i < n; i++) { const v = (q[i] - 0.5) * 1.6 + 0.5; a8[i] = v <= 0 ? 0 : v >= 1 ? 255 : Math.round(v * 255); }
-      } else {
-        a8 = new Uint8Array(n); for (let i = 0; i < n; i++) a8[i] = a[i] + 0.5;
-      }
-      const c0 = (y0 - top) * fw, c1 = c0 + h * fw;
-      recolor(d, d, a8, c0, c1, P, false);
-      ctx.putImageData(id8, 0, top, 0, y0 - top, fw, h);
-      post({ type: 'progress', id, p: Math.min(99, Math.round((y0 + h) / fh * 100)) });
-    }
-    const blob = await cv.convertToBlob({ type: fmt === 'png' ? 'image/png' : 'image/jpeg', quality: 0.95 });
-    cv.width = cv.height = 1;
-    post({ type: 'exported', id, blob });
+    const r = await openPreview(file, maxWork);
+    post({ type: 'opened', id, ...r }, [r.orig.buffer]);
   } catch (e) {
-    post({ type: 'error', id, kind: 'export', message: String(e && e.message || e) });
+    post({ type: 'error', id, kind: 'open', code: e instanceof OpenError ? e.code : 'open', message: String(e && e.message || e) });
   }
 }
 
-/* ---------- message loop (analyses run one at a time, in order) ---------- */
+/* ---------- full-size export (see exporter.js) ---------- */
+async function runExport(m) {
+  try {
+    const blob = await exportPhoto(m, p => post({ type: 'progress', id: m.id, p: Math.min(99, p) }));
+    post({ type: 'exported', id: m.id, blob });
+  } catch (e) {
+    post({ type: 'error', id: m.id, kind: 'export', message: String(e && e.message || e) });
+  }
+}
+
+/* ---------- message loop (analyses, SAM clicks and exports run one at a time, in order) ---------- */
 let queue = Promise.resolve();
 self.onmessage = e => {
   const m = e.data;
   switch (m.type) {
     case 'init': useLocal = !!m.local; startAI(); break;
+    case 'open': openPhoto(m); break;
     case 'analyze': queue = queue.then(() => analyze(m)); break;
     case 'samPoint': queue = queue.then(() => samPoint(m)); break;
-    case 'export': queue = queue.then(() => exportPhoto(m)); break;
+    case 'export': queue = queue.then(() => runExport(m)); break;
     case 'drop': embCache.delete(m.id); break;
   }
 };

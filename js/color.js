@@ -10,18 +10,35 @@ const fLab = t => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
 const iLab = t => { const t3 = t * t * t; return t3 > 0.008856 ? t3 : (t - 16 / 116) / 7.787; };
 const lin8 = v => v <= 0 ? 0 : SRGB[v >= 1 ? SN : (v * SN + 0.5) | 0];
 
+/* Lab is always relative to the D65 white, whatever the photo's colour profile (see icc.js). */
+export const XN = 0.95047, ZN = 1.08883;
+/** XYZ (D65, Y of white = 1) -> Lab, written into `out` and returned. */
+export function labOfXyz(X, Y, Z, out) {
+  const fx = fLab(X / XN), fy = fLab(Y), fz = fLab(Z / ZN);
+  out[0] = 116 * fy - 16; out[1] = 500 * (fx - fy); out[2] = 200 * (fy - fz); return out;
+}
+/** Lab -> XYZ (D65), L clamped to 0..100, written into `out` and returned. */
+export function xyzOfLab(L, a, b, out) {
+  if (L < 0) L = 0; else if (L > 100) L = 100;
+  const fy = (L + 16) / 116;
+  out[0] = iLab(fy + a / 500) * XN; out[1] = iLab(fy); out[2] = iLab(fy - b / 200) * ZN; return out;
+}
+
 /** sRGB 0..255 -> Lab, written into `out` (array of 3) and returned. */
 export function labOf(r, g, b, out) {
   const R = LIN[r], G = LIN[g], B = LIN[b];
-  const fx = fLab((0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047), fy = fLab(0.2126 * R + 0.7152 * G + 0.0722 * B), fz = fLab((0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883);
-  out[0] = 116 * fy - 16; out[1] = 500 * (fx - fy); out[2] = 200 * (fy - fz); return out;
+  return labOfXyz(0.4124 * R + 0.3576 * G + 0.1805 * B, 0.2126 * R + 0.7152 * G + 0.0722 * B, 0.0193 * R + 0.1192 * G + 0.9505 * B, out);
 }
 /** Lab -> sRGB 0..255 (clamped), written into `out` and returned. */
 export function rgbOfLab(L, a, b, out) {
-  if (L < 0) L = 0; else if (L > 100) L = 100;
-  const fy = (L + 16) / 116, x = iLab(fy + a / 500) * 0.95047, y = iLab(fy), z = iLab(fy - b / 200) * 1.08883;
+  xyzOfLab(L, a, b, out); const x = out[0], y = out[1], z = out[2];
   out[0] = lin8(3.2406 * x - 1.5372 * y - 0.4986 * z); out[1] = lin8(-0.9689 * x + 1.8758 * y + 0.0415 * z); out[2] = lin8(0.0557 * x - 0.2040 * y + 1.0570 * z); return out;
 }
+/** Linear sRGB (0..1, clamped) -> 8-bit sRGB code. */
+export const srgb8 = lin8;
+
+/** The sRGB colour space in the shape every recolouring function expects (other spaces come from icc.js). */
+export const SRGB_SPACE = { name: 'sRGB', labOf, rgbOfLab };
 
 export const DEFAULT_COLOR = { rgb: [51, 63, 72], hex: '#333F48', name: '432 C' };
 

@@ -2,7 +2,7 @@
 // In Lab, the wall under ordinary light becomes exactly the target colour and every other spot keeps its
 // difference from it: a warm lamp glow stays lighter and warmer, a shadow stays darker.
 
-import { LIN, labOf, rgbOfLab } from './color.js';
+import { LIN, labOf, SRGB_SPACE } from './color.js';
 
 export const CHROMA_KEEP = 0.85;
 export const HL = [236, 72, 153];        // pink used by "show detected area"
@@ -42,9 +42,10 @@ export function renderParams(ref, target, adj) {
     TL, kc: 1 + (a.contrast || 0) / 100 };
 }
 
-/** Recolour pixels [i0, i1) of src into dst (RGBA, may be the same buffer). alpha[i] 0..255 per pixel; hl = pink overlay instead of recolour. */
-export function recolor(src, dst, alpha, i0, i1, P, hl) {
-  const lab = [0, 0, 0], rgb = [0, 0, 0], { dL, ka, kb, sf, op, TL, kc } = P;
+/** Recolour pixels [i0, i1) of src into dst (RGBA, may be the same buffer). alpha[i] 0..255 per pixel; hl = pink overlay instead of recolour.
+ *  space: the colour space the pixels are in ({labOf, rgbOfLab}, see color.js / icc.js); sRGB by default. */
+export function recolor(src, dst, alpha, i0, i1, P, hl, space = SRGB_SPACE) {
+  const lab = [0, 0, 0], rgb = [0, 0, 0], { dL, ka, kb, sf, op, TL, kc } = P, { labOf: toLab, rgbOfLab: toRgb } = space;
   for (let i = i0; i < i1; i++) {
     const o = i * 4, a = alpha[i], r = src[o], g = src[o + 1], b = src[o + 2];
     if (a <= 0) { dst[o] = r; dst[o + 1] = g; dst[o + 2] = b; dst[o + 3] = 255; continue; }
@@ -53,7 +54,7 @@ export function recolor(src, dst, alpha, i0, i1, P, hl) {
       dst[o] = r + (HL[0] - r) * q; dst[o + 1] = g + (HL[1] - g) * q; dst[o + 2] = b + (HL[2] - b) * q;
     } else {
       const k = a / 255 * op;
-      labOf(r, g, b, lab); rgbOfLab(TL + (lab[0] + dL - TL) * kc, (lab[1] * CHROMA_KEEP + ka) * sf, (lab[2] * CHROMA_KEEP + kb) * sf, rgb);
+      toLab(r, g, b, lab); toRgb(TL + (lab[0] + dL - TL) * kc, (lab[1] * CHROMA_KEEP + ka) * sf, (lab[2] * CHROMA_KEEP + kb) * sf, rgb);
       dst[o] = r + (rgb[0] - r) * k; dst[o + 1] = g + (rgb[1] - g) * k; dst[o + 2] = b + (rgb[2] - b) * k;
     }
     dst[o + 3] = 255;

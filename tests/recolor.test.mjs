@@ -37,3 +37,14 @@ test('contrast keeps the wall reference colour on the target', () => {
   recolor(one, dst, new Uint8Array([255]), 0, 1, P, false);
   for (let k = 0; k < 3; k++) assert.ok(Math.abs(dst[k] - target[k]) <= 2, `channel ${k}: ${dst[k]} vs ${target[k]}`);
 });
+
+test('in another colour profile the wall reference still becomes the target colour (same Lab, other RGB numbers)', async () => {
+  const { parseIcc, colorSpaceOf, buildIcc } = await import('../js/icc.js');
+  const adobe = colorSpaceOf(parseIcc(buildIcc('Adobe RGB (1998)', [0.6097559, 0.2052401, 0.1492240, 0.3111145, 0.6256561, 0.0632294, 0.0194702, 0.0608902, 0.7448387], 563 / 256)));
+  const wall = [150, 165, 180], wallLab = adobe.labOf(...wall, [0, 0, 0]);
+  const px = new Uint8ClampedArray([...wall, 255]), out = new Uint8ClampedArray(4);
+  recolor(px, out, new Uint8Array([255]), 0, 1, renderParams(wallLab, target, { op: 100, sat: 0, light: 0 }), false, adobe);
+  const got = adobe.labOf(out[0], out[1], out[2], [0, 0, 0]), want = labOf(...target, [0, 0, 0]);
+  assert.ok(Math.hypot(got[0] - want[0], got[1] - want[1], got[2] - want[2]) < 1.5);
+  assert.notDeepEqual([...out.subarray(0, 3)], target);
+});

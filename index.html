@@ -125,7 +125,7 @@
     <div class="card export">
       <div class="ch"><h3 data-i18n="exportTitle"></h3>
         <div class="seg2" role="group" data-i18n-aria="format">
-          <button type="button" data-fmt="jpg" aria-pressed="true">JPG</button><button type="button" data-fmt="png" aria-pressed="false">PNG</button>
+          <button type="button" data-fmt="jpg" aria-pressed="true">JPG</button><button type="button" data-fmt="png" aria-pressed="false">PNG</button><button type="button" data-fmt="psd" aria-pressed="false">PSD</button>
         </div>
       </div>
       <button type="button" class="btn primary" id="dl" data-i18n="download"></button>
@@ -136,6 +136,7 @@
 
   <!-- ===== footer: AI + analysis status, GitHub ===== -->
   <footer class="foot">
+    <button type="button" class="help" id="infoBtn" data-i18n-aria="infoTitle" aria-haspopup="dialog">?</button>
     <span class="ai" id="aiChip" data-state="loading" aria-live="polite"></span>
     <span class="status" id="status" aria-live="polite"></span>
     <span class="prog" id="prog" hidden><i></i></span>
@@ -148,9 +149,20 @@
   </footer>
 </div>
 
-<input type="file" id="file" accept="image/*" multiple hidden>
+<input type="file" id="file" accept="image/*,.tif,.tiff,.psd" multiple hidden>
 <div class="overlay" id="busy" hidden><div class="box" role="status"><div class="spin"></div><div id="busyTxt"></div><div class="bar" id="busyBar" hidden><i></i></div></div></div>
 <div class="banner" id="banner" role="alert" hidden></div>
+
+<!-- ===== info: formats, export, colour profiles ===== -->
+<dialog class="info" id="infoDlg" aria-labelledby="infoTitle">
+  <div class="ih"><h2 id="infoTitle" data-i18n="infoTitle"></h2><button type="button" class="x" id="infoClose" data-i18n-aria="close">×</button></div>
+  <section><h3 data-i18n="infoInT"></h3><p data-i18n="infoInP"></p></section>
+  <section><h3 data-i18n="infoRasterT"></h3><p data-i18n="infoRasterP"></p></section>
+  <section><h3 data-i18n="infoOutT"></h3><p data-i18n="infoOutP"></p></section>
+  <section><h3 data-i18n="infoIccT"></h3><p data-i18n="infoIccP"></p><p data-i18n="infoIccP2"></p></section>
+  <section><h3 data-i18n="infoLimitT"></h3><p data-i18n="infoLimitP"></p></section>
+  <section><h3 data-i18n="infoPrivT"></h3><p data-i18n="infoPrivP"></p></section>
+</dialog>
 
 <script type="module" src="js/app.js"></script>
 </body>

@@ -9,10 +9,10 @@ Nothing is uploaded: the photos, the AI models and the rendering all stay on you
 
 ## What it does
 
-1. Drop one or more photos (JPG, PNG, WebP, any size).
+1. Drop one or more photos (JPG, PNG, WebP, AVIF, TIFF or PSD, any size).
 2. Two small AI models find the wall automatically; a colour model then refines the outline pixel by pixel. While a photo is being analysed you already see it, with a small pixel animation on the *After* side and the progress in the footer.
 3. The wall is recoloured **while keeping the light**: shadows stay darker, lamp glow stays warmer, edges stay soft.
-4. Compare before / after with a slider, touch up the selection if needed, and download the result at the photo's full resolution (single file or ZIP for a batch).
+4. Compare before / after with a slider, touch up the selection if needed, and download the result at the photo's full resolution as JPG, PNG or layered PSD (single file or ZIP for a batch).
 
 The default colour is **Pantone 432 C** (`#333F48`). Type any other colour in the colour card:
 
@@ -24,6 +24,8 @@ The default colour is **Pantone 432 C** (`#333F48`). Type any other colour in th
 
 You can also open the app with a colour in the URL: `index.html?color=185%20C` or `index.html?color=E4002B`.
 The chosen colour is remembered in the browser and applies to every photo of the session. Exported files are named `photo-432C.jpg` (or `photo-E4002B.jpg` for a hex colour).
+
+The **?** button at the bottom left explains supported files, export formats and colour profiles inside the app.
 
 ## Touch-up tools
 
@@ -40,9 +42,18 @@ Keyboard: `B` brush (Paint wall), `E` eraser, `+` / `−` add or remove an area 
 
 The interface is dark-themed and available in English (default), French and Italian; switch language at the top right, the choice is remembered.
 
+## Files and colour profiles
+
+| | |
+| --- | --- |
+| **Open** | JPG, PNG, WebP, AVIF, GIF, BMP, TIFF and PSD, 8 or 16 bits per channel. HEIC must be converted first. |
+| **TIFF / PSD** | the flattened image is used (layers are ignored, the file is never changed). A PSD must be saved with *Maximize compatibility* (Photoshop's default). 16-bit files are reduced to 8 bits; CMYK files are converted to RGB with approximate colours. |
+| **Export** | JPG, PNG or PSD, 8 bits per channel. The PSD has two layers: the original photo and the new colour with the wall as a layer mask and the chosen opacity (saturation, brightness and contrast are applied in the colour layer). The flattened image is stored too, so other apps show the result. |
+| **Colour profile** | each photo keeps its ICC profile (sRGB, Adobe RGB, Display P3, ProPhoto… any RGB matrix profile): the colour is applied in the photo's own profile and the profile is embedded in the export. The wall looks the same colour whatever the profile, but the RGB numbers depend on it (in an Adobe RGB photo, 432 C is not 51 63 72). Photos without a profile, and AVIF / GIF / BMP files, are treated as sRGB; CMYK, greyscale and lookup-table profiles are exported in sRGB, and the app says so when the photo is opened. |
+
 ## Privacy
 
-Everything runs client-side. The only network requests are for the app files (the Lexend font is bundled), the [transformers.js](https://github.com/huggingface/transformers.js) library (from jsDelivr) and the AI models (from the Hugging Face hub, downloaded once and cached by the browser, about 155 MB in total). No photo, mask or colour ever leaves your machine.
+Everything runs client-side. The only network requests are for the app files (the Lexend font is bundled), the [transformers.js](https://github.com/huggingface/transformers.js) library (from jsDelivr), the TIFF / PSD libraries (from jsDelivr, only when such a file is opened or a PSD is exported) and the AI models (from the Hugging Face hub, downloaded once and cached by the browser, about 155 MB in total). No photo, mask or colour ever leaves your machine.
 
 ## How it works
 
@@ -50,7 +61,7 @@ Everything runs client-side. The only network requests are for the app files (th
 - **SlimSAM** (a compact Segment Anything model) cuts whole surfaces with precise outlines around the points where CLIPSeg is confident.
 - A **tint model** learns the wall's chromaticity from the confident area and grows the mask through gradual lighting changes, stopping at real edges; a colour **guided filter** gives the final soft outline. Pieces of wall cut off by furniture are recovered by colour similarity.
 - Recolouring happens in **CIE Lab**: the wall under ordinary light becomes exactly the target colour and every other pixel keeps its difference from it.
-- Detection runs on a 1280 px working copy; the download is rendered at full size in a Web Worker, with the mask re-snapped to full-resolution edges strip by strip.
+- Photos are opened in a Web Worker. Detection runs on a 1280 px sRGB working copy; the download is rendered at full size from the original file, decoded without colour conversion, recoloured in the photo's own ICC profile, with the mask re-snapped to full-resolution edges strip by strip.
 - Without the AI models (offline, or an unsupported browser) the app falls back to a simple colour-based detection that only finds blue / grey-blue walls.
 
 ## Browser support
@@ -82,7 +93,7 @@ The transformers.js library itself is still loaded from jsDelivr.
 
 ### Tests
 
-The pure modules (colour maths and parsing, image processing, detection, recolouring, ZIP writer, translations) have unit tests that run with Node 20+:
+The pure modules (colour maths and parsing, ICC profiles, file containers, image processing, detection, recolouring, ZIP writer, translations) have unit tests that run with Node 20+:
 
 ```
 npm test
@@ -93,9 +104,15 @@ npm test
 ```
 index.html        page markup
 css/style.css     styles
-js/app.js         UI, photo list, brush, undo/redo, export orchestration
+js/app.js         UI, photo list, brush, undo/redo, export orchestration, info dialog
 js/anim.js        pixel animation shown while a photo is analysed
-js/worker.js      Web Worker: transformers.js inference, detection, SAM clicks, full-size export
+js/worker.js      Web Worker: message loop, transformers.js inference, detection, SAM clicks
+js/decode.js      opening photos in the worker (browser formats, TIFF, PSD) with their colour profile
+js/exporter.js    full-size export: mask upscaling, recolouring in the photo's profile, JPG / PNG / PSD output
+js/psd.js         layered PSD writer (original + colour layer with mask)
+js/icc.js         ICC profiles: reading, colour spaces, a small sRGB profile
+js/formats.js     file signatures, ICC profiles inside JPEG / PNG / WebP
+js/libs.js        TIFF and PSD libraries, loaded on demand
 js/detect.js      wall detection (CLIPSeg map + tint model + SAM + guided filter), colour fallback
 js/recolor.js     Lab recolouring that keeps the light
 js/imgproc.js     blur, connected components, morphology, guided filter
@@ -119,6 +136,8 @@ It uses the following open-source components, loaded at run time:
 | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (bundled in transformers.js) | Microsoft | MIT |
 | [CLIPSeg](https://github.com/timojl/clipseg) `clipseg-rd64-refined` — ONNX conversion [Xenova/clipseg-rd64-refined](https://huggingface.co/Xenova/clipseg-rd64-refined) | Timo Lüddecke & Alexander Ecker (CIDAS, University of Göttingen) | Apache-2.0 |
 | [SlimSAM](https://github.com/czg1225/SlimSAM) `slimsam-77-uniform` — ONNX conversion [Xenova/slimsam-77-uniform](https://huggingface.co/Xenova/slimsam-77-uniform) | Zigeng Chen et al. (NUS), based on Meta's Segment Anything | Apache-2.0 |
+| [UTIF.js](https://github.com/photopea/UTIF.js) (`utif2` 4.1.0, TIFF decoding) | Photopea | MIT |
+| [ag-psd](https://github.com/Agamnentzar/ag-psd) 33.0.0 (PSD reading and writing) | Agamnentzar | MIT |
 
 The interface uses the [Lexend](https://github.com/googlefonts/lexend) typeface by The Lexend Project Authors, bundled under the [SIL Open Font License 1.1](fonts/OFL.txt).
 

@@ -1,4 +1,4 @@
-// Wall Recolor: page logic. Photos are decoded here, analysed and exported in the worker (js/worker.js).
+// Wall Recolor: page logic. Photos are opened, analysed and exported in the worker (js/worker.js).
 
 import { DEFAULT_COLOR, parseColor, colorSlug } from './color.js';
 import { boxBlur } from './imgproc.js';
@@ -38,10 +38,11 @@ let target = DEFAULT_COLOR;
   const fromUrl = parseColor(new URLSearchParams(location.search).get('color')), saved = parseColor(store.get('wr-color'));
   if (fromUrl) target = fromUrl; else if (saved) target = saved;
 }
+const colorLabel = () => target.name ? 'Pantone ' + target.name : target.hex;
 function showColor() {
   const c = target;
   document.documentElement.style.setProperty('--target', c.hex);
-  $('colName').textContent = c.name ? 'Pantone ' + c.name : c.hex;
+  $('colName').textContent = colorLabel();
   $('colDesc').textContent = c.hex + ' · RGB ' + c.rgb.join(' · ') + ' — ' + t('colorNote');
 }
 function setColor(c) {
@@ -63,25 +64,40 @@ $('colIn').addEventListener('input', () => $('colIn').removeAttribute('aria-inva
 const AI = { state: 'loading', p: 0 };
 const isLocal = ['localhost', '127.0.0.1', '[::1]', ''].includes(location.hostname);
 const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-const exportPending = new Map(); let ridN = 0, samPending = null;
+const calls = new Map(); let ridN = 0, samPending = null;      // requests answered by the worker: open, export
+function callWorker(msg, transfer, onProgress) {
+  return new Promise((res, rej) => {
+    const id = 'r' + (++ridN);
+    calls.set(id, { res, rej, onProgress });
+    worker.postMessage({ ...msg, id }, transfer || []);
+  });
+}
+function settle(id, value, err) {
+  const x = calls.get(id); if (!x) return;
+  calls.delete(id);
+  if (err) x.rej(err); else x.res(value);
+}
+const workerError = m => Object.assign(new Error(m.message), { code: m.code });
 worker.onmessage = e => {
   const m = e.data;
   switch (m.type) {
+    case 'opened': settle(m.id, m); break;
     case 'ai': AI.state = m.state; AI.p = m.p; updateAiChip(); updateStatus(); break;
     case 'analyzing': { const ph = byId(m.id); if (ph && ph.status === 'pending') { ph.prog = Math.max(ph.prog, m.p); if (S && S.ph === ph) updateStatus(); } break; }
     case 'analyzed': onAnalyzed(m); break;
     case 'samMask': onSamMask(m, null); break;
-    case 'progress': { const x = exportPending.get(m.id); if (x) x.onProgress(m.p); break; }
-    case 'exported': { const x = exportPending.get(m.id); if (x) { exportPending.delete(m.id); x.res(m.blob); } break; }
+    case 'progress': { const x = calls.get(m.id); if (x && x.onProgress) x.onProgress(m.p); break; }
+    case 'exported': settle(m.id, m.blob); break;
     case 'error':
       if (m.kind === 'analyze') onAnalyzeError(m);
       else if (m.kind === 'sam') onSamMask(m, m.message);
-      else if (m.kind === 'export') { const x = exportPending.get(m.id); if (x) { exportPending.delete(m.id); x.rej(new Error(m.message)); } }
+      else settle(m.id, null, workerError(m));                   // open, export
       break;
   }
 };
 worker.onerror = () => {
   AI.state = 'off'; updateAiChip();
+  for (const id of [...calls.keys()]) settle(id, null, new Error('worker'));
   for (const p of photos) if (p.status === 'pending') { p.status = 'error'; p.error = 'analyze'; }
   drawCarousel(false); updateNav(); updateStatus();
   banner(t('errAnalyze'));
@@ -103,30 +119,26 @@ const byId = id => photos.find(p => p.id === id);
 
 /* ---------- photos ---------- */
 const isHeic = f => /image\/hei[cf]/i.test(f.type) || /\.(heic|heif)$/i.test(f.name);
+const isImageFile = f => /^image\//.test(f.type) || isHeic(f) || /\.(tiff?|psd)$/i.test(f.name);   // PSD often has no image/ type
+const OPEN_ERRORS = { heic: 'errHeic', psdFlat: 'errPsdFlat', depth32: 'errDepth', lib: 'errLib' };
+/* The worker decodes the file (any format, see decode.js) and returns the sRGB working copy plus the file's
+   format, bit depth and colour profile. */
 async function makePhoto(file) {
-  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  try {
-    const nw = bmp.width, nh = bmp.height;
-    if (!nw || !nh) throw new Error('empty');
-    const k = Math.min(1, Math.sqrt(MAXPIX / (nw * nh)), MAXSIDE / Math.max(nw, nh));
-    const fw = Math.max(1, Math.round(nw * k)), fh = Math.max(1, Math.round(nh * k));
-    const ws = Math.min(1, MAXWORK / Math.max(nw, nh));
-    const W = Math.max(1, Math.round(nw * ws)), H = Math.max(1, Math.round(nh * ws));
-    const c = document.createElement('canvas'); c.width = W; c.height = H;
-    const x = c.getContext('2d', { willReadFrequently: true });
-    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
-    x.drawImage(bmp, 0, 0, W, H);
-    const orig = x.getImageData(0, 0, W, H).data, thumb = thumbOf(c);
-    c.width = c.height = 1;
-    return {
-      id: nextId++, file, name: file.name.replace(/\.[^.]+$/, ''), type: file.type, nw, nh, fw, fh, W, H, orig, thumb, thumbStale: false,
-      status: 'pending', prog: 0, error: null, base: null, sens: 0.4, cover: 0, viaAI: false,
-      edits: new Uint8Array(2 * W * H), undo: [], redo: [], adj: { ...ADJ0 }
-    };
-  } finally { bmp.close(); }
+  const { orig, W, H, nw, nh, fmt, depth, profile } = await callWorker({ type: 'open', file, maxWork: MAXWORK });
+  const k = Math.min(1, Math.sqrt(MAXPIX / (nw * nh)), MAXSIDE / Math.max(nw, nh));
+  const fw = Math.max(1, Math.round(nw * k)), fh = Math.max(1, Math.round(nh * k));
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  c.getContext('2d').putImageData(new ImageData(orig, W, H), 0, 0);
+  const thumb = thumbOf(c);
+  c.width = c.height = 1;
+  return {
+    id: nextId++, file, name: file.name.replace(/\.[^.]+$/, ''), fmt, depth, profile, nw, nh, fw, fh, W, H, orig, thumb, thumbStale: false,
+    status: 'pending', prog: 0, error: null, base: null, sens: 0.4, cover: 0, viaAI: false,
+    edits: new Uint8Array(2 * W * H), undo: [], redo: [], adj: { ...ADJ0 }
+  };
 }
 async function addFiles(list) {
-  const files = [...list].filter(f => /^image\//.test(f.type) || isHeic(f));
+  const files = [...list].filter(isImageFile);
   if (!files.length) { banner(t('errType')); return; }
   for (const f of files) {
     try {
@@ -136,7 +148,8 @@ async function addFiles(list) {
       drawCarousel(false); updateNav();
       if (cur < 0) activate(photos.length - 1);
       worker.postMessage({ type: 'analyze', id: ph.id, orig: ph.orig, W: ph.W, H: ph.H });
-    } catch (e) { banner((isHeic(f) ? t('errHeic') : t('errOpen')) + ' (' + f.name + ')'); }
+      if (ph.profile && !ph.profile.kept) banner(t('profileLost', { name: ph.profile.name, file: f.name }));
+    } catch (e) { banner(t(OPEN_ERRORS[e.code] || (isHeic(f) ? 'errHeic' : 'errOpen')) + ' (' + f.name + ')'); }
   }
 }
 function onAnalyzed(m) {
@@ -170,7 +183,7 @@ function activate(i) {
   fitStage(); shownProg = 0;
   compose(); render(); updateStatus();
   if (ph.status === 'pending') anim.start(cvOrig, target.rgb); else anim.stop();
-  setFmt(/png/.test(ph.type) ? 'png' : 'jpg');
+  setFmt(ph.fmt === 'psd' ? 'psd' : (ph.fmt === 'png' || ph.fmt === 'tiff') ? 'png' : 'jpg');   // lossless sources stay lossless
   showAdj(); updateTools();
   $('cursor').style.display = 'none';
   resetView();
@@ -280,6 +293,10 @@ function tickProgress() {
   showProgress();
   progTimer = setTimeout(tickProgress, 250);
 }
+function profileLabel(ph) {
+  if (!ph.profile) return t('profileNone');
+  return ph.profile.kept ? ph.profile.name : t('profileToSrgb', { name: ph.profile.name });
+}
 function updateStatus() {
   const el = $('status'), bar = $('prog');
   bar.hidden = true; clearTimeout(progTimer);
@@ -287,7 +304,7 @@ function updateStatus() {
   const ph = S.ph;
   $('photoName').textContent = ph.name;
   const size = (ph.fw !== ph.nw || ph.fh !== ph.nh) ? t('infoScaled', { w: ph.nw, h: ph.nh, fw: ph.fw, fh: ph.fh }) : t('info', { w: ph.nw, h: ph.nh });
-  $('info').textContent = t('photoOf', { i: cur + 1, n: photos.length }) + ' · ' + size;
+  $('info').textContent = [t('photoOf', { i: cur + 1, n: photos.length }), size, profileLabel(ph)].concat(ph.depth > 8 ? [t('depthTo8', { b: ph.depth })] : []).join(' · ');
   if (ph.status === 'error') el.textContent = t('statusError');
   else if (ph.status !== 'ready') {
     if (!ph.prog) { shownProg = 0; el.textContent = AI.state === 'loading' ? t('statusWaitAI') : t('statusWait'); }
@@ -357,11 +374,9 @@ function alphaOf(ph) {
   return { alpha, ref: wallRef(W, H, ph.orig, alpha) };
 }
 function requestExport(ph, fmt, onProgress) {
-  return new Promise((res, rej) => {
-    const id = 'x' + (++ridN), { alpha, ref } = alphaOf(ph);
-    exportPending.set(id, { res, rej, onProgress });
-    worker.postMessage({ type: 'export', id, file: ph.file, W: ph.W, H: ph.H, fw: ph.fw, fh: ph.fh, alpha, ref, target: target.rgb, adj: ph.adj, fmt }, [alpha.buffer]);
-  });
+  const { alpha, ref } = alphaOf(ph), names = { original: t('layerOriginal'), wall: t('layerWall', { c: colorLabel() }) };
+  return callWorker({ type: 'export', file: ph.file, W: ph.W, H: ph.H, fw: ph.fw, fh: ph.fh, alpha, ref, target: target.rgb, adj: ph.adj, fmt, names },
+    [alpha.buffer], onProgress);
 }
 function downloadBlob(blob, filename) {
   const a = document.createElement('a'), u = URL.createObjectURL(blob);
@@ -371,8 +386,7 @@ function downloadBlob(blob, filename) {
 }
 function setFmt(f) { fmt = f; document.querySelectorAll('[data-fmt]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fmt === f))); }
 document.querySelectorAll('[data-fmt]').forEach(b => b.addEventListener('click', () => setFmt(b.dataset.fmt)));
-const extOf = fmt => fmt === 'png' ? 'png' : 'jpg';
-const outName = (ph, fmt) => ph.name + '-' + colorSlug(target) + '.' + extOf(fmt);
+const outName = (ph, fmt) => ph.name + '-' + colorSlug(target) + '.' + fmt;     // fmt is also the extension: jpg, png, psd
 async function exportCurrent() {
   if (!S || S.ph.status !== 'ready') return;
   const ph = S.ph;
@@ -391,8 +405,8 @@ async function exportAll() {
       const ph = list[k];
       busy(t('exportingN', { i: k + 1, n: list.length, p: 0 }), k / list.length * 100);
       const blob = await requestExport(ph, fmt, p => busy(t('exportingN', { i: k + 1, n: list.length, p }), (k + p / 100) / list.length * 100));
-      const base = ph.name + '-' + colorSlug(target); let nm = base + '.' + extOf(fmt), c = 2;
-      while (used.has(nm)) { nm = base + '-' + c + '.' + extOf(fmt); c++; }
+      const base = ph.name + '-' + colorSlug(target); let nm = base + '.' + fmt, c = 2;
+      while (used.has(nm)) { nm = base + '-' + c + '.' + fmt; c++; }
       used.add(nm); entries.push({ name: nm, blob });
     }
     busy(t('zipping'));
@@ -603,7 +617,7 @@ showBsize();
 /* ---------- keyboard ---------- */
 const TOOL_KEYS = { b: 'add', e: 'erase', '+': 'pick', '-': 'remove' };   // B brush, E eraser, + / − area (also numpad)
 window.addEventListener('keydown', e => {
-  if (!S) return;
+  if (!S || infoDlg.open) return;
   const tg = e.target, tag = tg && tg.tagName;
   if (tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && tg.type !== 'range' && tg.type !== 'checkbox')) return;
   const key = e.key.toLowerCase();
@@ -765,6 +779,15 @@ fileIn.addEventListener('change', () => { const fl = [...fileIn.files]; fileIn.v
 ['dragenter', 'dragover'].forEach(ev => window.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(ev => window.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
 window.addEventListener('drop', e => { const fl = e.dataTransfer && [...e.dataTransfer.files]; if (fl && fl.length) addFiles(fl); });
+
+/* ---------- info dialog (bottom-left "?"): formats, export, colour profiles ---------- */
+const infoDlg = $('infoDlg');
+$('infoBtn').onclick = () => infoDlg.showModal();
+$('infoClose').onclick = () => infoDlg.close();
+infoDlg.addEventListener('click', e => {                     // a click on the backdrop (outside the box) closes it
+  const r = infoDlg.getBoundingClientRect();
+  if (e.target === infoDlg && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) infoDlg.close();
+});
 
 /* ---------- small screens ---------- */
 {
