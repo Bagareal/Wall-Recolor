@@ -24,6 +24,7 @@ function applyLang() {
   document.documentElement.lang = lang;
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
   document.querySelectorAll('[data-lang]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
   $('colIn').placeholder = t('colorPlaceholder');
   showColor(); updateStatus(); updateAiChip(); updateNav(); drawCarousel(false); setPos(pos);
@@ -119,8 +120,8 @@ const byId = id => photos.find(p => p.id === id);
 
 /* ---------- photos ---------- */
 const isHeic = f => /image\/hei[cf]/i.test(f.type) || /\.(heic|heif)$/i.test(f.name);
-const isImageFile = f => /^image\//.test(f.type) || isHeic(f) || /\.(tiff?|psd)$/i.test(f.name);   // PSD often has no image/ type
-const OPEN_ERRORS = { heic: 'errHeic', psdFlat: 'errPsdFlat', depth32: 'errDepth', lib: 'errLib' };
+const isImageFile = f => /^image\//.test(f.type) || isHeic(f) || /\.(tiff?|psd)$/i.test(f.name);   // a PSD gets its own message
+const OPEN_ERRORS = { heic: 'errHeic', psd: 'errPsd', lib: 'errLib' };
 /* The worker decodes the file (any format, see decode.js) and returns the sRGB working copy plus the file's
    format, bit depth and colour profile. */
 async function makePhoto(file) {
@@ -183,7 +184,7 @@ function activate(i) {
   fitStage(); shownProg = 0;
   compose(); render(); updateStatus();
   if (ph.status === 'pending') anim.start(cvOrig, target.rgb); else anim.stop();
-  setFmt(ph.fmt === 'psd' ? 'psd' : (ph.fmt === 'png' || ph.fmt === 'tiff') ? 'png' : 'jpg');   // lossless sources stay lossless
+  setFmt(ph.fmt === 'png' || ph.fmt === 'tiff' ? 'png' : 'jpg');   // lossless sources stay lossless
   showAdj(); updateTools();
   $('cursor').style.display = 'none';
   resetView();
@@ -374,8 +375,8 @@ function alphaOf(ph) {
   return { alpha, ref: wallRef(W, H, ph.orig, alpha) };
 }
 function requestExport(ph, fmt, onProgress) {
-  const { alpha, ref } = alphaOf(ph), names = { original: t('layerOriginal'), wall: t('layerWall', { c: colorLabel() }) };
-  return callWorker({ type: 'export', file: ph.file, W: ph.W, H: ph.H, fw: ph.fw, fh: ph.fh, alpha, ref, target: target.rgb, adj: ph.adj, fmt, names },
+  const { alpha, ref } = alphaOf(ph), layerName = t('layerWall', { c: colorLabel() });
+  return callWorker({ type: 'export', file: ph.file, W: ph.W, H: ph.H, fw: ph.fw, fh: ph.fh, alpha, ref, target: target.rgb, adj: ph.adj, fmt, layerName },
     [alpha.buffer], onProgress);
 }
 function downloadBlob(blob, filename) {
@@ -386,7 +387,7 @@ function downloadBlob(blob, filename) {
 }
 function setFmt(f) { fmt = f; document.querySelectorAll('[data-fmt]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fmt === f))); }
 document.querySelectorAll('[data-fmt]').forEach(b => b.addEventListener('click', () => setFmt(b.dataset.fmt)));
-const outName = (ph, fmt) => ph.name + '-' + colorSlug(target) + '.' + fmt;     // fmt is also the extension: jpg, png, psd
+const outName = (ph, fmt) => ph.name + '-' + colorSlug(target) + (fmt === 'psd' ? '-layer' : '') + '.' + fmt;   // fmt is also the extension
 async function exportCurrent() {
   if (!S || S.ph.status !== 'ready') return;
   const ph = S.ph;
@@ -405,7 +406,7 @@ async function exportAll() {
       const ph = list[k];
       busy(t('exportingN', { i: k + 1, n: list.length, p: 0 }), k / list.length * 100);
       const blob = await requestExport(ph, fmt, p => busy(t('exportingN', { i: k + 1, n: list.length, p }), (k + p / 100) / list.length * 100));
-      const base = ph.name + '-' + colorSlug(target); let nm = base + '.' + fmt, c = 2;
+      const base = ph.name + '-' + colorSlug(target) + (fmt === 'psd' ? '-layer' : ''); let nm = base + '.' + fmt, c = 2;
       while (used.has(nm)) { nm = base + '-' + c + '.' + fmt; c++; }
       used.add(nm); entries.push({ name: nm, blob });
     }

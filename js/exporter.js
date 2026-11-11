@@ -1,13 +1,13 @@
 // Full-size export (runs in the worker). The original file is decoded at export size in its own colour profile,
 // the working-size mask is scaled up (and re-snapped to the edges when it was enlarged), and the photo is
-// recoloured in that profile. JPG and PNG embed the photo's profile; PSD keeps the original and the colour as layers.
+// recoloured in that profile. JPG and PNG embed the photo's profile; PSD is the wall layer alone (see psd.js).
 
 import { openFull } from './decode.js';
 import { renderParams, recolor } from './recolor.js';
 import { guidedFilter } from './imgproc.js';
 import { jpegWithIcc, pngWithIcc } from './formats.js';
 import { srgbIcc } from './icc.js';
-import { layeredPsd } from './psd.js';
+import { wallLayerPsd } from './psd.js';
 
 /** Full-size mask (one byte per pixel) from the working-size alpha (W × H), processed in strips.
  *  data: the full-size photo (RGBA), used as the guide when the mask is re-snapped. progress(0..1). */
@@ -59,24 +59,15 @@ function recolourAll(src, dst, alpha, P, space, n, progress) {
 }
 
 /** Render one photo at full size. m: the worker's 'export' message; progress(0..99). Returns a Blob. */
-export async function exportPhoto({ file, W, H, fw, fh, alpha, ref, target, adj, fmt, names }, progress) {
+export async function exportPhoto({ file, W, H, fw, fh, alpha, ref, target, adj, fmt, layerName }, progress) {
   const src = await openFull(file, fw, fh), data = src.data, n = fw * fh, icc = src.icc || srgbIcc();
   progress(10);
   const mask = fullMask(data, fw, fh, alpha, W, H, f => progress(10 + Math.round(f * 40)));
 
   if (fmt === 'psd') {
-    // colour layer: the new colour everywhere (the mask decides where it shows); composite: exactly what JPG/PNG get
-    const colour = new Uint8ClampedArray(data.length), composite = new Uint8ClampedArray(data.length), op = adj.op / 100;
-    recolourAll(data, colour, null, renderParams(ref, target, { ...adj, op: 100 }), src.space, n, f => progress(50 + Math.round(f * 30)));
-    for (let i = 0, o = 0; i < n; i++, o += 4) {
-      const k = mask[i] / 255 * op;
-      composite[o] = data[o] + (colour[o] - data[o]) * k;
-      composite[o + 1] = data[o + 1] + (colour[o + 1] - data[o + 1]) * k;
-      composite[o + 2] = data[o + 2] + (colour[o + 2] - data[o + 2]) * k;
-      composite[o + 3] = 255;
-    }
-    progress(85);
-    return layeredPsd({ width: fw, height: fh, original: data, colour, composite, mask, opacity: op, icc, names });
+    // the new colour everywhere: the mask decides where it shows, so the layer over the photo gives exactly the JPG/PNG
+    recolourAll(data, data, null, renderParams(ref, target, { ...adj, op: 100 }), src.space, n, f => progress(50 + Math.round(f * 35)));
+    return wallLayerPsd({ width: fw, height: fh, colour: data, mask, opacity: adj.op / 100, icc, name: layerName });
   }
 
   recolourAll(data, data, mask, renderParams(ref, target, adj), src.space, n, f => progress(50 + Math.round(f * 35)));

@@ -1,13 +1,14 @@
-// Opening photos (runs in the worker). Browser formats are decoded by the browser; TIFF and PSD by the libraries in
-// libs.js. Every photo carries its colour profile: a supported profile is kept for the export, where the photo is
-// decoded without colour conversion and recoloured in its own space (see icc.js).
+// Opening photos (runs in the worker). Browser formats are decoded by the browser, TIFF by the library in libs.js
+// (only the flattened image: TIFF layers are not read). PSD files are not opened.
+// Every photo carries its colour profile: a supported profile is kept for the export, where the photo is decoded
+// without colour conversion and recoloured in its own space (see icc.js).
 
 import { detectFormat, iccOf } from './formats.js';
 import { parseIcc, colorSpaceOf, looksSrgb } from './icc.js';
 import { SRGB_SPACE } from './color.js';
-import { loadUtif, loadAgPsd } from './libs.js';
+import { loadUtif } from './libs.js';
 
-/** A failure the page explains with its own message. code: 'heic' | 'psdFlat' | 'depth32' | 'lib' | 'open'. */
+/** A failure the page explains with its own message. code: 'heic' | 'psd' | 'lib' | 'open'. */
 export class OpenError extends Error { constructor(code) { super(code); this.code = code; } }
 
 async function lib(load) {
@@ -34,34 +35,14 @@ async function readTiff(bytes) {
   };
 }
 
-/* ---------- PSD (ag-psd): the flattened image Photoshop stores when "Maximize compatibility" is on ---------- */
-function isBlank(d) {
-  for (let o = 4; o < d.length; o += 4) if (d[o] !== d[0] || d[o + 1] !== d[1] || d[o + 2] !== d[2]) return false;
-  return true;
-}
-async function readPsdFile(bytes) {
-  const { readPsd } = await lib(loadAgPsd);
-  const psd = readPsd(bytes, { skipLayerImageData: true, skipThumbnail: true, skipLinkedFilesData: true, useImageData: true });
-  const layered = !!(psd.children && psd.children.length), res = psd.imageResources || {};
-  if (!psd.imageData || (layered && res.versionInfo && res.versionInfo.hasRealMergedData === false)) throw new OpenError('psdFlat');
-  const src = psd.imageData.data;
-  if (src instanceof Float32Array) throw new OpenError('depth32');
-  let data;
-  if (src instanceof Uint16Array) { data = new Uint8ClampedArray(src.length); for (let i = 0; i < src.length; i++) data[i] = src[i] / 257; }
-  else data = src instanceof Uint8ClampedArray ? src : new Uint8ClampedArray(src.buffer, src.byteOffset, src.length);
-  if (layered && isBlank(data)) throw new OpenError('psdFlat');
-  return { raster: opaque(data, psd.width, psd.height), icc: res.iccProfile ? Uint8Array.from(res.iccProfile) : null, depth: psd.bitsPerChannel || 8 };
-}
-
-/** Format, colour profile and (TIFF / PSD only) the pixels of a file, in the file's own colour space.
+/** Format, colour profile and (TIFF only) the pixels of a file, in the file's own colour space.
  *  space: the colour space to recolour in, null when the photo is handled in sRGB.
  *  profile: {name, kept} for the page, null when the file has no profile. */
 async function readSource(file) {
   const bytes = new Uint8Array(await file.arrayBuffer()), fmt = detectFormat(bytes);
-  if (fmt === 'heic') throw new OpenError('heic');
+  if (fmt === 'heic' || fmt === 'psd') throw new OpenError(fmt);
   let raster = null, icc = null, depth = 8;
   if (fmt === 'tiff') ({ raster, icc, depth } = await readTiff(bytes));
-  else if (fmt === 'psd') ({ raster, icc, depth } = await readPsdFile(bytes));
   else icc = await iccOf(bytes, fmt);
   const parsed = parseIcc(icc);
   let space = colorSpaceOf(parsed);
