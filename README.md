@@ -10,7 +10,7 @@ Nothing is uploaded: the photos, the AI models and the rendering all stay on you
 ## What it does
 
 1. Drop one or more photos (JPG, PNG, WebP, any size).
-2. Two small AI models find the wall automatically; a colour model then refines the outline pixel by pixel.
+2. Two small AI models find the wall automatically; a colour model then refines the outline pixel by pixel. While a photo is being analysed you already see it, with a small pixel animation on the *After* side and the progress in the footer.
 3. The wall is recoloured **while keeping the light**: shadows stay darker, lamp glow stays warmer, edges stay soft.
 4. Compare before / after with a slider, touch up the selection if needed, and download the result at the photo's full resolution (single file or ZIP for a batch).
 
@@ -33,16 +33,16 @@ The chosen colour is remembered in the browser and applies to every photo of the
 | **+ Area / − Area** | click a surface and the AI (SlimSAM) selects it whole, then adds it to or removes it from the wall |
 | **Undo / Redo** | per photo, 30 steps |
 | **Original (hold)** | shows the untouched photo while pressed |
-| **Colour sliders** | opacity of the new colour, saturation and brightness of the result |
+| **Adjustments** | opacity of the new colour, saturation, brightness and contrast of the result (contrast deepens or softens the shadows on the wall) |
 | **Show detected area** | pink overlay of the current selection |
 
 Keyboard (Touch up mode): `Ctrl+Z` undo, `Ctrl+Shift+Z` / `Ctrl+Y` redo, hold `O` for the original, `[` `]` brush size, `Shift+[` `]` brush hardness, `+` `−` `0` zoom, hold `Space` or use the right mouse button to pan, `Ctrl` + right-drag to change the brush size (left/right) and hardness (up/down). In the photo strip: arrows to move, `Delete` to remove the focused photo.
 
-The interface is available in English, French and Italian (picked from the browser language, switchable at the top right).
+The interface is dark-themed and available in English (default), French and Italian; switch language at the top right, the choice is remembered.
 
 ## Privacy
 
-Everything runs client-side. The only network requests are for the app files, the [transformers.js](https://github.com/huggingface/transformers.js) library (from jsDelivr) and the AI models (from the Hugging Face hub, downloaded once and cached by the browser, about 155 MB in total). No photo, mask or colour ever leaves your machine.
+Everything runs client-side. The only network requests are for the app files (the Lexend font is bundled), the [transformers.js](https://github.com/huggingface/transformers.js) library (from jsDelivr) and the AI models (from the Hugging Face hub, downloaded once and cached by the browser, about 155 MB in total). No photo, mask or colour ever leaves your machine.
 
 ## How it works
 
@@ -59,7 +59,7 @@ Made for desktop browsers with a mouse. Tested on Chrome and Edge; Firefox shoul
 
 ## Running it yourself
 
-The app is static: `index.html`, `css/` and `js/`. Any static web server will do (it must be served over HTTP, not opened as a file, because of the ES modules and the worker).
+The app is static: `index.html`, `css/`, `js/` and `fonts/`. Any static web server will do (it must be served over HTTP, not opened as a file, because of the ES modules and the worker).
 
 On Windows, **`start.bat`** starts a tiny PowerShell server on `http://localhost:8080` and opens the app; no installation needed.
 
@@ -94,6 +94,7 @@ npm test
 index.html        page markup
 css/style.css     styles
 js/app.js         UI, photo list, brush, undo/redo, export orchestration
+js/anim.js        pixel animation shown while a photo is analysed
 js/worker.js      Web Worker: transformers.js inference, detection, SAM clicks, full-size export
 js/detect.js      wall detection (CLIPSeg map + tint model + SAM + guided filter), colour fallback
 js/recolor.js     Lab recolouring that keeps the light
@@ -101,6 +102,7 @@ js/imgproc.js     blur, connected components, morphology, guided filter
 js/color.js       sRGB/Lab maths, colour parsing, Pantone table
 js/zip.js         minimal ZIP writer
 js/i18n.js        translations (en, fr, it)
+fonts/            Lexend (SIL Open Font License, see fonts/OFL.txt)
 tests/            node:test unit tests
 serve.ps1, start.bat   local server for Windows
 ```
@@ -117,6 +119,10 @@ It uses the following open-source components, loaded at run time:
 | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (bundled in transformers.js) | Microsoft | MIT |
 | [CLIPSeg](https://github.com/timojl/clipseg) `clipseg-rd64-refined` — ONNX conversion [Xenova/clipseg-rd64-refined](https://huggingface.co/Xenova/clipseg-rd64-refined) | Timo Lüddecke & Alexander Ecker (CIDAS, University of Göttingen) | Apache-2.0 |
 | [SlimSAM](https://github.com/czg1225/SlimSAM) `slimsam-77-uniform` — ONNX conversion [Xenova/slimsam-77-uniform](https://huggingface.co/Xenova/slimsam-77-uniform) | Zigeng Chen et al. (NUS), based on Meta's Segment Anything | Apache-2.0 |
+
+The interface uses the [Lexend](https://github.com/googlefonts/lexend) typeface by The Lexend Project Authors, bundled under the [SIL Open Font License 1.1](fonts/OFL.txt).
+
+The photo in the screenshot is by [Katja Rooke](https://unsplash.com/@rooke) on [Unsplash](https://unsplash.com/photos/77JACslA8G0) (Unsplash License).
 
 CLIPSeg also builds on OpenAI's CLIP (MIT). The guided filter follows He, Sun & Tang, *Guided Image Filtering* (2010).
 

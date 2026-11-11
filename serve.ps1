@@ -10,7 +10,7 @@ Write-Host "Wall Recolor is running at $url"
 Write-Host "Keep this window open while you use it. Close it to stop."
 if (-not $NoBrowser) { Start-Process $url }
 $mime = @{ '.html'='text/html; charset=utf-8'; '.js'='text/javascript'; '.mjs'='text/javascript'; '.css'='text/css'; '.json'='application/json';
-           '.txt'='text/plain'; '.onnx'='application/octet-stream'; '.wasm'='application/wasm'; '.png'='image/png'; '.jpg'='image/jpeg' }
+           '.txt'='text/plain'; '.onnx'='application/octet-stream'; '.wasm'='application/wasm'; '.png'='image/png'; '.jpg'='image/jpeg'; '.woff2'='font/woff2' }
 while ($listener.IsListening) {
   $ctx = $listener.GetContext(); $res = $ctx.Response
   try {

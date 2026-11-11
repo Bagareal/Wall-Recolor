@@ -17,14 +17,15 @@ test('placeholders match across languages', () => {
   for (const k of Object.keys(I18N.en)) for (const l of LANGS) assert.equal(ph(I18N[l][k]), ph(I18N.en[k]), `${l}.${k}`);
 });
 
-test('initialLang prefers the saved choice, then the browser language', () => {
-  assert.equal(initialLang('fr', 'it-IT'), 'fr');
-  assert.equal(initialLang(null, 'it-IT'), 'it');
-  assert.equal(initialLang('xx', 'de-DE'), 'en');
-  assert.equal(initialLang(undefined, undefined), 'en');
+test('initialLang uses the saved choice, otherwise English (the browser language is ignored)', () => {
+  assert.equal(initialLang('fr'), 'fr');
+  assert.equal(initialLang('it'), 'it');
+  assert.equal(initialLang(null), 'en');
+  assert.equal(initialLang('xx'), 'en');
+  assert.equal(initialLang(undefined), 'en');
 });
 
 test('translate substitutes placeholders and falls back to English', () => {
-  assert.equal(translate('it', 'statusFound', { p: '42' }), 'Parete rilevata: 42% della foto.');
+  assert.equal(translate('it', 'statusFound', { p: '42' }), 'Parete rilevata: 42% della foto');
   assert.equal(translate('it', 'nope'), 'nope');
 });

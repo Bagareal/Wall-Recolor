@@ -5,10 +5,12 @@ import { boxBlur } from './imgproc.js';
 import { wallRef, renderParams, recolor } from './recolor.js';
 import { makeZip } from './zip.js';
 import { initialLang, translate } from './i18n.js';
+import { createAnalysisAnim } from './anim.js';
 
 const MAXWORK = 1280;                  // longest side used for detection + preview
 const MAXPIX = 50e6, MAXSIDE = 16384;  // export limits (browser canvas limits)
 const UNDO_MAX = 30;
+const ADJ0 = { op: 100, sat: 0, light: 0, contrast: 0 };
 const $ = id => document.getElementById(id);
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -16,7 +18,7 @@ const store = {
 };
 
 /* ---------- language ---------- */
-let lang = initialLang(store.get('wr-lang'), navigator.language);
+let lang = initialLang(store.get('wr-lang'));
 const t = (k, v) => translate(lang, k, v);
 function applyLang() {
   document.documentElement.lang = lang;
@@ -43,7 +45,7 @@ function showColor() {
   $('colDesc').textContent = c.hex + ' · RGB ' + c.rgb.join(' · ') + ' — ' + t('colorNote');
 }
 function setColor(c) {
-  target = c; store.set('wr-color', c.name || c.hex); showColor();
+  target = c; store.set('wr-color', c.name || c.hex); showColor(); anim.setTarget(c.rgb);
   if (S) { render(); }
   for (const p of photos) p.thumbStale = true;
   scheduleThumbs(0);
@@ -66,6 +68,7 @@ worker.onmessage = e => {
   const m = e.data;
   switch (m.type) {
     case 'ai': AI.state = m.state; AI.p = m.p; updateAiChip(); updateStatus(); break;
+    case 'analyzing': { const ph = byId(m.id); if (ph && ph.status === 'pending') { ph.prog = Math.max(ph.prog, m.p); if (S && S.ph === ph) updateStatus(); } break; }
     case 'analyzed': onAnalyzed(m); break;
     case 'samMask': onSamMask(m, null); break;
     case 'progress': { const x = exportPending.get(m.id); if (x) x.onProgress(m.p); break; }
@@ -94,6 +97,8 @@ let S = null;                       // working state of the photo shown on scree
 let photos = [], cur = -1, nextId = 1;
 let mode = 'compare', tool = 'add', pos = 50, hlOn = false;
 const cvRes = $('cvRes'), cvOrig = $('cvOrig'), stage = $('stage');
+const anim = createAnalysisAnim($('cvAnim'));
+let fmt = 'jpg';
 const byId = id => photos.find(p => p.id === id);
 
 /* ---------- photos ---------- */
@@ -115,8 +120,8 @@ async function makePhoto(file) {
     c.width = c.height = 1;
     return {
       id: nextId++, file, name: file.name.replace(/\.[^.]+$/, ''), type: file.type, nw, nh, fw, fh, W, H, orig, thumb, thumbStale: false,
-      status: 'pending', error: null, base: null, sens: 0.4, cover: 0, viaAI: false,
-      edits: new Uint8Array(2 * W * H), undo: [], redo: [], adj: { op: 100, sat: 0, light: 0 }
+      status: 'pending', prog: 0, error: null, base: null, sens: 0.4, cover: 0, viaAI: false,
+      edits: new Uint8Array(2 * W * H), undo: [], redo: [], adj: { ...ADJ0 }
     };
   } finally { bmp.close(); }
 }
@@ -127,7 +132,7 @@ async function addFiles(list) {
     try {
       const ph = await makePhoto(f);
       photos.push(ph);
-      $('drop').hidden = true; $('studio').hidden = false;
+      showStudio(true);
       drawCarousel(false); updateNav();
       if (cur < 0) activate(photos.length - 1);
       worker.postMessage({ type: 'analyze', id: ph.id, orig: ph.orig, W: ph.W, H: ph.H });
@@ -136,14 +141,14 @@ async function addFiles(list) {
 }
 function onAnalyzed(m) {
   const ph = byId(m.id); if (!ph) return;
-  ph.base = m.alpha; ph.sens = m.sens; ph.cover = m.cover; ph.viaAI = m.viaAI; ph.status = 'ready'; ph.thumbStale = true;
-  if (S && S.ph === ph) { schedule(); updateTools(); }
+  ph.base = m.alpha; ph.sens = m.sens; ph.cover = m.cover; ph.viaAI = m.viaAI; ph.status = 'ready'; ph.prog = 100; ph.thumbStale = true;
+  if (S && S.ph === ph) { schedule(); updateTools(); anim.finish(cvRes); }
   scheduleThumbs(0); drawCarousel(false); updateNav();
 }
 function onAnalyzeError(m) {
   const ph = byId(m.id); if (!ph) return;
   ph.status = 'error'; ph.error = 'analyze';
-  if (S && S.ph === ph) { updateStatus(); updateTools(); }
+  if (S && S.ph === ph) { anim.stop(); updateStatus(); updateTools(); }
   drawCarousel(false); updateNav(); banner(t('errAnalyze') + ' (' + ph.name + ')');
 }
 
@@ -162,8 +167,10 @@ function activate(i) {
   S = { ph, W, H, orig: ph.orig, alpha: new Uint8Array(W * H), out: new ImageData(W, H), ref: null, cover: 0 };
   cvOrig.width = W; cvOrig.height = H; cvRes.width = W; cvRes.height = H;
   cvOrig.getContext('2d').putImageData(new ImageData(ph.orig, W, H), 0, 0);
+  fitStage(); shownProg = 0;
   compose(); render(); updateStatus();
-  $('fmt').value = /png/.test(ph.type) ? 'png' : 'jpg';
+  if (ph.status === 'pending') anim.start(cvOrig, target.rgb); else anim.stop();
+  setFmt(/png/.test(ph.type) ? 'png' : 'jpg');
   showAdj(); updateTools();
   $('cursor').style.display = 'none';
   resetView();
@@ -197,7 +204,7 @@ function removePhoto(ph) {
   photos.splice(i, 1);
   worker.postMessage({ type: 'drop', id: ph.id });
   if (!photos.length) {
-    S = null; cur = -1; $('studio').hidden = true; $('drop').hidden = false; drawCarousel(false); updateNav(); return;
+    S = null; cur = -1; anim.stop(); showStudio(false); drawCarousel(false); updateNav(); updateStatus(); updateTools(); return;
   }
   if (i === cur) {
     cur = -1; S = null;
@@ -242,23 +249,60 @@ function scheduleThumbs(delay) {          // one stale thumbnail at a time, curr
   }, delay);
 }
 
-/* ---------- status, carousel, navigation ---------- */
-function updateStatus() {
+/* ---------- layout: drop zone vs photo, photo fitted into the free space ---------- */
+function showStudio(on) {
+  $('drop').hidden = on; stage.hidden = !on; $('strip').hidden = !on;
+}
+function fitStage() {
   if (!S) return;
-  const ph = S.ph, el = $('status');
-  if (ph.status === 'error') el.textContent = t('statusError');
-  else if (ph.status !== 'ready') el.textContent = AI.state === 'loading' ? t('statusWaitAI', { p: AI.p }) : t('statusWait');
-  else {
-    const p = (S.cover * 100).toFixed(1);
-    el.textContent = S.cover < 0.005 ? t('statusNone') : t('statusFound', { p: lang === 'en' ? p : p.replace('.', ',') });
-  }
+  const box = $('stageBox'), bw = box.clientWidth, bh = box.clientHeight;
+  if (!bw || !bh) return;
+  const k = Math.min(bw / S.W, bh / S.H);
+  stage.style.width = Math.max(1, Math.floor(S.W * k)) + 'px'; stage.style.height = Math.max(1, Math.floor(S.H * k)) + 'px';
+  clampView(); applyView();
+}
+
+/* ---------- status (footer), title row, carousel, navigation ---------- */
+const STAGES = [3, 40, 80, 90, 99];          // worker progress steps; the bar creeps toward the next one
+let shownProg = 0, progTimer = 0;
+const nextStage = p => STAGES.find(v => v > p) || 99;
+function showProgress() {
+  const p = Math.floor(shownProg);
+  $('status').textContent = t('statusAnalysing', { p });
+  $('prog').firstElementChild.style.width = p + '%';
+}
+function tickProgress() {
+  clearTimeout(progTimer);
+  const ph = S && S.ph;
+  if (!ph || ph.status !== 'pending' || !ph.prog || (AI.state === 'loading' && ph.prog < 40)) return;
+  if (shownProg < ph.prog) shownProg = ph.prog;
+  else shownProg += (nextStage(ph.prog) - 1 - shownProg) * 0.04;
+  showProgress();
+  progTimer = setTimeout(tickProgress, 250);
+}
+function updateStatus() {
+  const el = $('status'), bar = $('prog');
+  bar.hidden = true; clearTimeout(progTimer);
+  if (!S) { el.textContent = ''; $('photoName').textContent = t('subtitle'); $('info').textContent = ''; return; }
+  const ph = S.ph;
+  $('photoName').textContent = ph.name;
   const size = (ph.fw !== ph.nw || ph.fh !== ph.nh) ? t('infoScaled', { w: ph.nw, h: ph.nh, fw: ph.fw, fh: ph.fh }) : t('info', { w: ph.nw, h: ph.nh });
-  $('info').textContent = size + (ph.status === 'ready' ? ' · ' + (ph.viaAI ? t('viaAI') : t('viaBasic')) : '');
+  $('info').textContent = t('photoOf', { i: cur + 1, n: photos.length }) + ' · ' + size;
+  if (ph.status === 'error') el.textContent = t('statusError');
+  else if (ph.status !== 'ready') {
+    if (!ph.prog) { shownProg = 0; el.textContent = AI.state === 'loading' ? t('statusWaitAI') : t('statusWait'); }
+    else if (AI.state === 'loading' && ph.prog < 40) el.textContent = t('statusWaitAI');
+    else { bar.hidden = false; shownProg = Math.max(shownProg, ph.prog); showProgress(); tickProgress(); }
+  } else {
+    const p = (S.cover * 100).toFixed(1);
+    el.textContent = (S.cover < 0.005 ? t('statusNone') : t('statusFound', { p: lang === 'en' ? p : p.replace('.', ',') }))
+      + ' · ' + (ph.viaAI ? t('viaAI') : t('viaBasic'));
+  }
 }
 function updateTools() {
   const ready = !!(S && S.ph.status === 'ready');
   for (const id of ['tAdd', 'tErase', 'tPick', 'tRemove', 'bUndo', 'bRedo', 'bPeek', 'bReset', 'aReset', 'dl']) $(id).disabled = !ready;
-  for (const id of ['bsize', 'bhard', 'aOp', 'aSat', 'aLight']) $(id).disabled = !ready;
+  for (const id of ['bsize', 'bhard', 'aOp', 'aSat', 'aLight', 'aCon']) $(id).disabled = !ready;
   if (S) { $('bUndo').disabled = !ready || !S.ph.undo.length; $('bRedo').disabled = !ready || !S.ph.redo.length; }
 }
 function drawCarousel(scroll) {
@@ -290,8 +334,8 @@ function drawCarousel(scroll) {
 function updateNav() {
   const usable = photos.filter(p => p.status !== 'error').length, ready = photos.filter(p => p.status === 'ready').length, work = photos.filter(p => p.status === 'pending').length;
   $('prev').hidden = $('next').hidden = usable < 2;
-  $('counter').textContent = cur >= 0 ? (cur + 1) + ' / ' + photos.length : '';
-  $('batchInfo').textContent = work ? t('batchWorking', { d: photos.length - work, n: photos.length }) : '';
+  $('batchInfo').textContent = work && photos.length > 1 ? t('batchWorking', { d: photos.length - work, n: photos.length }) : '';
+  updateStatus();
   const all = $('dlAll'); all.hidden = ready < 2; all.textContent = t('downloadAll', { n: ready });
 }
 
@@ -325,11 +369,13 @@ function downloadBlob(blob, filename) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(u), 15000);
 }
+function setFmt(f) { fmt = f; document.querySelectorAll('[data-fmt]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fmt === f))); }
+document.querySelectorAll('[data-fmt]').forEach(b => b.addEventListener('click', () => setFmt(b.dataset.fmt)));
 const extOf = fmt => fmt === 'png' ? 'png' : 'jpg';
 const outName = (ph, fmt) => ph.name + '-' + colorSlug(target) + '.' + extOf(fmt);
 async function exportCurrent() {
   if (!S || S.ph.status !== 'ready') return;
-  const ph = S.ph, fmt = $('fmt').value;
+  const ph = S.ph;
   busy(t('exporting', { p: 0 }), 0);
   try {
     const blob = await requestExport(ph, fmt, p => busy(t('exporting', { p }), p));
@@ -339,7 +385,7 @@ async function exportCurrent() {
 }
 async function exportAll() {
   const list = photos.filter(p => p.status === 'ready'); if (!list.length) return;
-  const fmt = $('fmt').value, entries = [], used = new Set();
+  const entries = [], used = new Set();
   try {
     for (let k = 0; k < list.length; k++) {
       const ph = list[k];
@@ -524,7 +570,7 @@ function resetView() { zoom = 1; tx = ty = 0; applyView(); }
 $('zIn').onclick = () => zoomCenter(1.5);
 $('zOut').onclick = () => zoomCenter(1 / 1.5);
 $('zFit').onclick = resetView;
-window.addEventListener('resize', () => { clampView(); applyView(); });
+new ResizeObserver(() => fitStage()).observe($('stageBox'));
 stage.addEventListener('wheel', e => {
   if (!S || mode !== 'touch') return;
   e.preventDefault();
@@ -670,23 +716,23 @@ stage.addEventListener('keydown', e => {
 });
 
 /* ---------- colour adjustments ---------- */
+const sign = v => (v > 0 ? '+' : '') + v;
 function showAdj() {
-  const a = S ? S.ph.adj : { op: 100, sat: 0, light: 0 };
-  $('aOp').value = a.op; $('aSat').value = a.sat; $('aLight').value = a.light;
+  const a = S ? S.ph.adj : ADJ0;
+  $('aOp').value = a.op; $('aSat').value = a.sat; $('aLight').value = a.light; $('aCon').value = a.contrast;
   $('aOpVal').textContent = a.op + '%';
-  $('aSatVal').textContent = (a.sat > 0 ? '+' : '') + a.sat;
-  $('aLightVal').textContent = (a.light > 0 ? '+' : '') + a.light;
+  $('aSatVal').textContent = sign(a.sat); $('aLightVal').textContent = sign(a.light); $('aConVal').textContent = sign(a.contrast);
 }
 let adjPending = false;
 function adjChanged() {
   if (!S) return;
-  S.ph.adj = { op: +$('aOp').value, sat: +$('aSat').value, light: +$('aLight').value };
+  S.ph.adj = { op: +$('aOp').value, sat: +$('aSat').value, light: +$('aLight').value, contrast: +$('aCon').value };
   showAdj();
   if (adjPending) return; adjPending = true;
   requestAnimationFrame(() => { adjPending = false; if (S) { render(); S.ph.thumbStale = true; scheduleThumbs(500); } });
 }
-for (const id of ['aOp', 'aSat', 'aLight']) $(id).addEventListener('input', adjChanged);
-$('aReset').onclick = () => { if (!S) return; S.ph.adj = { op: 100, sat: 0, light: 0 }; showAdj(); render(); S.ph.thumbStale = true; scheduleThumbs(300); };
+for (const id of ['aOp', 'aSat', 'aLight', 'aCon']) $(id).addEventListener('input', adjChanged);
+$('aReset').onclick = () => { if (!S) return; S.ph.adj = { ...ADJ0 }; showAdj(); render(); S.ph.thumbStale = true; scheduleThumbs(300); };
 showAdj();
 
 /* ---------- carousel controls ---------- */

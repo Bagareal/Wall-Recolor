@@ -3,135 +3,149 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Wall Recolor</title>
 <meta name="description" content="Recolor the wall of your photos in any Pantone, hex or RGB colour, in your browser. Nothing is uploaded.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23333F48'/%3E%3Crect x='6' y='8' width='20' height='12' rx='2' fill='%23ffffff' fill-opacity='.85'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23333F48'/%3E%3Crect x='6' y='8' width='20' height='12' rx='2' fill='%233df5a7' fill-opacity='.9'/%3E%3C/svg%3E">
+<link rel="preload" href="fonts/lexend-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="brand">
-      <div class="logo" aria-hidden="true"></div>
-      <div>
-        <h1 data-i18n="title">Wall Recolor</h1>
-        <p class="sub" data-i18n="subtitle"></p>
+<div class="app">
+  <!-- ===== left: views and touch-up tools ===== -->
+  <aside class="side">
+    <div class="brand"><div class="logo" aria-hidden="true"></div><h1 data-i18n="title">Wall Recolor</h1></div>
+
+    <div class="lbl" data-i18n="viewLabel"></div>
+    <div class="navs" role="group" data-i18n-aria="viewLabel">
+      <button type="button" class="nav" id="mCompare" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg><span data-i18n="viewCompare"></span></button>
+      <button type="button" class="nav" id="mTouch" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg><span data-i18n="viewTouch"></span></button>
+    </div>
+
+    <div id="touchCard" class="touch-tools" hidden>
+      <div class="lbl" data-i18n="toolsLabel"></div>
+      <div class="navs" role="group" data-i18n-aria="toolsLabel">
+        <button type="button" class="nav sub" id="tAdd" aria-pressed="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 8v8M8 12h8"/></svg><span data-i18n="toolAdd"></span></button>
+        <button type="button" class="nav sub" id="tErase" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M8 12h8"/></svg><span data-i18n="toolErase"></span></button>
+        <button type="button" class="nav sub" id="tPick" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8-6 2-2 6z"/></svg><span data-i18n="toolPick"></span></button>
+        <button type="button" class="nav sub" id="tRemove" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8-6 2-2 6z"/><path d="M15 20h6"/></svg><span data-i18n="toolRemove"></span></button>
+      </div>
+      <p class="hint" data-i18n="toolHint"></p>
+
+      <div class="lbl" data-i18n="brushLabel"></div>
+      <div class="sl"><div class="r"><label for="bsize" data-i18n="brushSize"></label><span id="bsizeVal"></span></div>
+        <input type="range" id="bsize" min="2" max="200" value="40"></div>
+      <div class="sl"><div class="r"><label for="bhard" data-i18n="brushHard"></label><span id="bhardVal"></span></div>
+        <input type="range" id="bhard" min="0" max="100" value="80"></div>
+
+      <div class="side-bottom">
+        <div class="pair"><button type="button" class="btn" id="bUndo" data-i18n="undo"></button><button type="button" class="btn" id="bRedo" data-i18n="redo"></button></div>
+        <button type="button" class="btn" id="bPeek" data-i18n="original"></button>
+        <button type="button" class="btn" id="bReset" data-i18n="resetEdits"></button>
+        <details class="keys"><summary data-i18n="shortcuts"></summary><p data-i18n="touchHint"></p></details>
       </div>
     </div>
+  </aside>
+
+  <!-- ===== centre: photo ===== -->
+  <main class="main">
+    <div class="notice" id="desktopNote" role="note" hidden><span data-i18n="desktopNote"></span><button type="button" id="noteClose" data-i18n-aria="close">×</button></div>
+    <div class="top">
+      <div class="ttl"><h2 id="photoName"></h2><p class="s" id="info"></p></div>
+      <div class="grow"></div>
+      <label class="pill check"><input type="checkbox" id="hl"><span data-i18n="hl"></span></label>
+      <div class="zoom" id="zoomBar" role="group" hidden>
+        <button type="button" id="zOut" data-i18n-aria="zoomOut">−</button>
+        <span class="zlabel" id="zLabel">100%</span>
+        <button type="button" id="zIn" data-i18n-aria="zoomIn">+</button>
+        <button type="button" id="zFit" data-i18n="zoomFit"></button>
+      </div>
+    </div>
+
+    <div class="stagebox" id="stageBox">
+      <section id="drop" class="drop" tabindex="0" role="button" aria-labelledby="dropTitle">
+        <div class="ico" aria-hidden="true">+</div>
+        <h3 id="dropTitle" data-i18n="dropTitle"></h3>
+        <p data-i18n="dropSub"></p>
+        <p class="note" data-i18n="dropNote"></p>
+      </section>
+      <div id="stage" class="stage compare" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" data-i18n-aria="compareHelp" hidden>
+        <div class="view" id="view">
+          <canvas id="cvRes"></canvas>
+          <canvas id="cvAnim" hidden></canvas>
+          <canvas id="cvOrig"></canvas>
+        </div>
+        <div class="divider" id="divider"><div class="knob" aria-hidden="true">⇆</div></div>
+        <span class="tag tagL" data-i18n="before"></span>
+        <span class="tag tagR" data-i18n="after"></span>
+        <div class="cursor" id="cursor"></div>
+        <div class="bprev" id="bprev"></div>
+        <button type="button" class="arrow navL" id="prev" hidden data-i18n-aria="prev">‹</button>
+        <button type="button" class="arrow navR" id="next" hidden data-i18n-aria="next">›</button>
+      </div>
+    </div>
+
+    <div class="strip" id="strip" role="listbox" data-i18n-aria="photosLabel" hidden></div>
+  </main>
+
+  <!-- ===== right: colour, adjustments, export ===== -->
+  <aside class="right">
     <div class="lang" role="group" aria-label="Language">
       <button type="button" data-lang="en" aria-pressed="true">EN</button>
       <button type="button" data-lang="fr" aria-pressed="false">FR</button>
       <button type="button" data-lang="it" aria-pressed="false">IT</button>
     </div>
-  </header>
 
-  <div class="notice" id="desktopNote" role="note" hidden><span data-i18n="desktopNote"></span><button type="button" id="noteClose" data-i18n-aria="close">×</button></div>
-  <p class="ai" id="aiChip" data-state="loading" aria-live="polite"></p>
+    <div class="card colour">
+      <div class="swatch" aria-hidden="true"></div>
+      <b id="colName"></b>
+      <span class="cd" id="colDesc"></span>
+      <form class="in" id="colForm">
+        <label for="colIn" class="sr-only" data-i18n="colorTitle"></label>
+        <input id="colIn" type="text" autocomplete="off" spellcheck="false">
+        <button type="submit" class="btn" data-i18n="colorApply"></button>
+      </form>
+      <p class="hint" data-i18n="colorHint"></p>
+    </div>
 
-  <main>
-    <section id="drop" class="drop" tabindex="0" role="button" aria-labelledby="dropTitle">
-      <div class="ico" aria-hidden="true">+</div>
-      <h2 id="dropTitle" data-i18n="dropTitle"></h2>
-      <p data-i18n="dropSub"></p>
-      <p class="note" data-i18n="dropNote"></p>
-    </section>
+    <div class="card">
+      <div class="ch"><h3 data-i18n="adjTitle"></h3><button type="button" class="link" id="aReset" data-i18n="adjReset"></button></div>
+      <div class="sl"><div class="r"><label for="aOp" data-i18n="adjOp"></label><span id="aOpVal"></span></div><input type="range" id="aOp" min="0" max="100" value="100"></div>
+      <div class="sl"><div class="r"><label for="aSat" data-i18n="adjSat"></label><span id="aSatVal"></span></div><input type="range" id="aSat" min="-100" max="100" value="0"></div>
+      <div class="sl"><div class="r"><label for="aLight" data-i18n="adjLight"></label><span id="aLightVal"></span></div><input type="range" id="aLight" min="-100" max="100" value="0"></div>
+      <div class="sl"><div class="r"><label for="aCon" data-i18n="adjContrast"></label><span id="aConVal"></span></div><input type="range" id="aCon" min="-100" max="100" value="0"></div>
+    </div>
 
-    <section id="studio" class="studio" hidden>
-      <div>
-        <div class="toolbar">
-          <div class="seg" role="group" aria-label="View">
-            <button type="button" id="mCompare" aria-pressed="true" data-i18n="viewCompare"></button>
-            <button type="button" id="mTouch" aria-pressed="false" data-i18n="viewTouch"></button>
-          </div>
-          <label class="check"><input type="checkbox" id="hl"><span data-i18n="hl"></span></label>
-          <div class="seg zoombar" id="zoomBar" role="group" hidden>
-            <button type="button" id="zOut" data-i18n-aria="zoomOut" title="−">−</button>
-            <span class="zlabel" id="zLabel">100%</span>
-            <button type="button" id="zIn" data-i18n-aria="zoomIn" title="+">+</button>
-            <button type="button" id="zFit" data-i18n="zoomFit"></button>
-          </div>
-        </div>
-        <div id="stage" class="stage compare" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" data-i18n-aria="compareHelp">
-          <div class="view" id="view">
-            <canvas id="cvRes"></canvas>
-            <canvas id="cvOrig"></canvas>
-          </div>
-          <div class="divider" id="divider"><div class="knob" aria-hidden="true">⇆</div></div>
-          <span class="tag tagL" data-i18n="before"></span>
-          <span class="tag tagR" data-i18n="after"></span>
-          <div class="cursor" id="cursor"></div>
-          <div class="bprev" id="bprev"></div>
-          <button type="button" class="nav navL" id="prev" hidden data-i18n-aria="prev">‹</button>
-          <button type="button" class="nav navR" id="next" hidden data-i18n-aria="next">›</button>
-        </div>
-        <p class="status" id="status" aria-live="polite"></p>
-        <p class="info" id="info"></p>
-        <div class="carousel">
-          <div class="cbar"><span class="counter" id="counter"></span><span id="batchInfo"></span></div>
-          <div class="strip" id="strip" role="listbox" data-i18n-aria="photosLabel"></div>
+    <div class="card export">
+      <div class="ch"><h3 data-i18n="exportTitle"></h3>
+        <div class="seg2" role="group" data-i18n-aria="format">
+          <button type="button" data-fmt="jpg" aria-pressed="true">JPG</button><button type="button" data-fmt="png" aria-pressed="false">PNG</button>
         </div>
       </div>
+      <button type="button" class="btn primary" id="dl" data-i18n="download"></button>
+      <button type="button" class="btn" id="dlAll" hidden></button>
+      <button type="button" class="btn" id="again" data-i18n="newPhoto"></button>
+    </div>
+  </aside>
 
-      <aside class="panel">
-        <div class="card pantone">
-          <div class="col"></div>
-          <div class="lab"><b id="colName"></b><span id="colDesc"></span></div>
-          <form class="edit" id="colForm">
-            <label for="colIn" class="sr-only" hidden data-i18n="colorTitle"></label>
-            <input id="colIn" type="text" autocomplete="off" spellcheck="false">
-            <button type="submit" class="btn" data-i18n="colorApply"></button>
-          </form>
-          <p class="hint" data-i18n="colorHint"></p>
-        </div>
-
-        <div class="card" id="touchCard" hidden>
-          <h3 data-i18n="touchTitle"></h3>
-          <div class="row" style="margin-bottom:8px">
-            <button type="button" class="btn" id="tAdd" aria-pressed="true" data-i18n="toolAdd"></button>
-            <button type="button" class="btn" id="tErase" aria-pressed="false" data-i18n="toolErase"></button>
-          </div>
-          <div class="row" style="margin-bottom:8px">
-            <button type="button" class="btn" id="tPick" aria-pressed="false" data-i18n="toolPick"></button>
-            <button type="button" class="btn" id="tRemove" aria-pressed="false" data-i18n="toolRemove"></button>
-          </div>
-          <p class="hint" style="margin:0 0 12px" data-i18n="toolHint"></p>
-          <div class="lbl"><label for="bsize" data-i18n="brushSize"></label><span id="bsizeVal"></span></div>
-          <input type="range" id="bsize" min="2" max="200" value="40">
-          <div class="lbl" style="margin-top:10px"><label for="bhard" data-i18n="brushHard"></label><span id="bhardVal"></span></div>
-          <input type="range" id="bhard" min="0" max="100" value="80">
-          <div class="row" style="margin-top:12px">
-            <button type="button" class="btn" id="bUndo" data-i18n="undo"></button>
-            <button type="button" class="btn" id="bRedo" data-i18n="redo"></button>
-          </div>
-          <div class="row" style="margin-top:8px">
-            <button type="button" class="btn" id="bPeek" data-i18n="original"></button>
-            <button type="button" class="btn" id="bReset" data-i18n="resetEdits"></button>
-          </div>
-          <h3 style="margin-top:18px" data-i18n="adjTitle"></h3>
-          <div class="lbl"><label for="aOp" data-i18n="adjOp"></label><span id="aOpVal"></span></div>
-          <input type="range" id="aOp" min="0" max="100" value="100">
-          <div class="lbl" style="margin-top:10px"><label for="aSat" data-i18n="adjSat"></label><span id="aSatVal"></span></div>
-          <input type="range" id="aSat" min="-100" max="100" value="0">
-          <div class="lbl" style="margin-top:10px"><label for="aLight" data-i18n="adjLight"></label><span id="aLightVal"></span></div>
-          <input type="range" id="aLight" min="-100" max="100" value="0">
-          <div class="row" style="margin-top:10px"><button type="button" class="btn" id="aReset" data-i18n="adjReset"></button></div>
-          <p class="hint" data-i18n="touchHint"></p>
-        </div>
-
-        <div class="card">
-          <div class="field">
-            <label for="fmt" data-i18n="format"></label>
-            <select id="fmt"><option value="jpg">JPG</option><option value="png">PNG</option></select>
-          </div>
-          <button type="button" class="btn primary" id="dl" data-i18n="download"></button>
-          <div style="height:10px"></div>
-          <button type="button" class="btn" id="dlAll" style="width:100%" hidden></button>
-          <div style="height:10px"></div>
-          <button type="button" class="btn" id="again" style="width:100%" data-i18n="newPhoto"></button>
-        </div>
-      </aside>
-    </section>
-  </main>
+  <!-- ===== footer: AI + analysis status, GitHub ===== -->
+  <footer class="foot">
+    <span class="ai" id="aiChip" data-state="loading" aria-live="polite"></span>
+    <span class="status" id="status" aria-live="polite"></span>
+    <span class="prog" id="prog" hidden><i></i></span>
+    <span class="batch" id="batchInfo"></span>
+    <span class="grow"></span>
+    <a class="gh" href="https://github.com/Bagareal/Wall-Recolor" target="_blank" rel="noopener">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      <span data-i18n="github"></span>
+    </a>
+  </footer>
 </div>
 
 <input type="file" id="file" accept="image/*" multiple hidden>

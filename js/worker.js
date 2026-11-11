@@ -133,19 +133,24 @@ async function samMasks(hd, points) {
 
 /* ---------- analysis of one photo ---------- */
 async function analyze({ id, orig, W, H }) {
+  const step = p => post({ type: 'analyzing', id, p });   // rough progress by stage, for the page's progress bar
   try {
+    step(3);
     const work = buildWork(orig, W, H);
     let P = null, sam = null;
     if (aiState !== 'off') {
       try { P = await runClip(orig, W, H); }
       catch (e) { aiOff(); P = null; }
+      step(40);
     }
     if (P) {
       work.ai = P;
       if (aiMax(P) >= AI_MIN) {                // SAM only when CLIPSeg actually sees a wall
         try {
           const hd = await samPrepare(id, orig, W, H), pts = samPoints(P, W, H);
+          step(80);
           if (pts.length) sam = samUnion(await samMasks(hd, pts), pts, P, W, H);
+          step(90);
         } catch (e) { sam = null; }
       }
       work.sam = sam;
